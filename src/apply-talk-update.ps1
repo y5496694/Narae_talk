@@ -24,6 +24,7 @@ try {
     function Copy-Managed([string]$from,[string]$to){if(Test-Path -LiteralPath $from -PathType Container){& (Join-Path $source 'scripts\copy-tree.ps1') -Source $from -Destination $to}else{Copy-Item -LiteralPath $from -Destination $to -Force}}
     foreach($name in $names){$file=Join-Path $appRoot $name;if(Test-Path -LiteralPath $file){Copy-Managed $file (Join-Path $backup $name)}}
     try {
+        $env:NARAE_SKILL_BACKUP_ROOT=Join-Path $backup 'skills'
         & (Join-Path $source 'scripts\install.ps1') -InstallRoot $appRoot -Product Talk -NoShortcut -ReuseRuntime:$same
         $metadata=Get-Content -LiteralPath (Join-Path $appRoot 'installation.json') -Raw -Encoding UTF8 | ConvertFrom-Json
         $metadata | Add-Member -NotePropertyName sourceCommit -NotePropertyValue $jobData.commit -Force
