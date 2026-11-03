@@ -1,5 +1,4 @@
 (()=>{
- if(new URLSearchParams(location.search).get('calendarOnly')==='1')return;
  const el=id=>document.getElementById(id),dialog=el('approvalDialog');let pending=null,deciding=false;
  const names={create_document:'한글 문서 만들기',edit_document:'한글 문서 수정',edit_live_document:'열린 한글 문서 수정',export_pdf:'PDF 사본 저장'},keys={path:'문서',target:'저장 위치',text:'내용',blocks:'문서 구성',operations:'수정 내용',url:'주소',ref:'화면 항목',action:'작업',value:'선택값',key:'입력 키'};
  function details(value){return (names[value.name]||value.name)+'\n\n'+Object.entries(value.args).filter(([key])=>!['expectedHash','liveRevision'].includes(key)).map(([key,item])=>(keys[key]||key)+'\n'+(typeof item==='string'?item:JSON.stringify(item,null,2))).join('\n\n');}
