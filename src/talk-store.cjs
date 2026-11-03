@@ -41,7 +41,7 @@ function assertTool(friend,name,args={}){
  if(!permits(friend,name))throw Error('이 친구에게 연결되지 않은 도구입니다. 나래 친구에게 요청하세요.');
  if(name==='gyomu_addon_read'&&friend!=='narae'&&args.id!==friend)throw Error('이 친구의 사용 안내만 읽을 수 있습니다.');
  if(name==='gyomu_skill_read'&&friend!=='narae'){
-  const scopes={hangul:['hangul','hangul-jobs'],cbe:['cbe'],browser:['overview'],portal:['portal','neis','edufine','wxs'],wxs:['wxs'],kakao:['overview'],gyomu:['overview'],regional:['overview']};
+  const scopes={hangul:['hangul','hangul-jobs'],cbe:['cbe'],browser:['overview'],portal:['overview','portal','neis','edufine','wxs'],wxs:['wxs'],kakao:['overview'],gyomu:['overview'],regional:['overview']};
   if(!scopes[friend]?.includes(args.area))throw Error('이 친구의 CLI 사용 안내만 읽을 수 있습니다.');
  }
 }
