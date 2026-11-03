@@ -21,7 +21,8 @@ try {
     }
     $same=(Dependency-Plan $appRoot) -eq (Dependency-Plan $source)
     foreach($name in @('requirements.txt','scripts/runtime-downloads.json')){if((Get-FileHash -LiteralPath (Join-Path $appRoot $name)).Hash -ne (Get-FileHash -LiteralPath (Join-Path $source $name)).Hash){$same=$false}}
-    foreach($name in $names){$file=Join-Path $appRoot $name;if(Test-Path -LiteralPath $file){Copy-Item -LiteralPath $file -Destination $backup -Recurse -Force}}
+    function Copy-Managed([string]$from,[string]$to){if(Test-Path -LiteralPath $from -PathType Container){& (Join-Path $source 'scripts\copy-tree.ps1') -Source $from -Destination $to}else{Copy-Item -LiteralPath $from -Destination $to -Force}}
+    foreach($name in $names){$file=Join-Path $appRoot $name;if(Test-Path -LiteralPath $file){Copy-Managed $file (Join-Path $backup $name)}}
     try {
         & (Join-Path $source 'scripts\install.ps1') -InstallRoot $appRoot -Product Talk -NoShortcut -ReuseRuntime:$same
         $metadata=Get-Content -LiteralPath (Join-Path $appRoot 'installation.json') -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -29,11 +30,11 @@ try {
         $metadata | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $appRoot 'installation.json') -Encoding UTF8
         'complete' | Set-Content -LiteralPath (Join-Path $stage 'result.txt')
     } catch {
-        foreach($name in $names){$file=Join-Path $backup $name;if(Test-Path -LiteralPath $file){Copy-Item -LiteralPath $file -Destination $appRoot -Recurse -Force}}
+        foreach($name in $names){$file=Join-Path $backup $name;if(Test-Path -LiteralPath $file){Copy-Managed $file (Join-Path $appRoot $name)}}
         'failed: '+$_.Exception.Message | Set-Content -LiteralPath (Join-Path $stage 'result.txt')
         throw
     }
-} catch {Write-Output $_.Exception.Message} finally {
+} catch {'failed: '+$_.Exception.Message | Set-Content -LiteralPath (Join-Path $stage 'result.txt');Write-Output $_.Exception.Message} finally {
     Stop-Transcript | Out-Null
     if(Test-Path -LiteralPath $runtime){$env:NARAE_TALK_HOME=$jobData.home;Start-Process -FilePath $runtime -ArgumentList @(('"'+$appRoot+'"'),'--talk') -WorkingDirectory $appRoot -WindowStyle Hidden}
 }

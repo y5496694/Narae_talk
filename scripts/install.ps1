@@ -20,7 +20,7 @@ New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
 if($sourceRoot -ne $InstallRoot){
     foreach($name in @('src','ui','vendor','skills','scripts','docs','resources','experiments','package.json','package-lock.json','requirements.txt','LICENSE','README.md','THIRD_PARTY_NOTICES.md','narae-office.cmd','narae-talk.cmd','나래톡 실행.cmd','나래톡 설치.cmd')){
         $source=Join-Path $sourceRoot $name
-        if(Test-Path -LiteralPath $source){Copy-Item -LiteralPath $source -Destination $InstallRoot -Recurse -Force}
+        if(Test-Path -LiteralPath $source){if(Test-Path -LiteralPath $source -PathType Container){& (Join-Path $PSScriptRoot 'copy-tree.ps1') -Source $source -Destination (Join-Path $InstallRoot $name)}else{Copy-Item -LiteralPath $source -Destination $InstallRoot -Force}}
     }
 }
 Push-Location $InstallRoot
