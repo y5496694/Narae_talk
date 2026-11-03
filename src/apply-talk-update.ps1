@@ -14,8 +14,13 @@ try {
     $old=Get-Process -Id $jobData.pid -ErrorAction SilentlyContinue
     if($old -and -not $old.WaitForExit(120000)){throw '앱이 종료되지 않아 업데이트를 중단했습니다.'}
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
-    $same=$true
-    foreach($name in @('package-lock.json','requirements.txt','scripts/runtime-downloads.json')){if((Get-FileHash -LiteralPath (Join-Path $appRoot $name)).Hash -ne (Get-FileHash -LiteralPath (Join-Path $source $name)).Hash){$same=$false}}
+    function Dependency-Plan([string]$folder){
+        $plan=Get-Content -LiteralPath (Join-Path $folder 'package-lock.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        $plan.PSObject.Properties.Remove('version');$plan.packages.''.PSObject.Properties.Remove('version')
+        return ($plan | ConvertTo-Json -Depth 100 -Compress)
+    }
+    $same=(Dependency-Plan $appRoot) -eq (Dependency-Plan $source)
+    foreach($name in @('requirements.txt','scripts/runtime-downloads.json')){if((Get-FileHash -LiteralPath (Join-Path $appRoot $name)).Hash -ne (Get-FileHash -LiteralPath (Join-Path $source $name)).Hash){$same=$false}}
     foreach($name in $names){$file=Join-Path $appRoot $name;if(Test-Path -LiteralPath $file){Copy-Item -LiteralPath $file -Destination $backup -Recurse -Force}}
     try {
         & (Join-Path $source 'scripts\install.ps1') -InstallRoot $appRoot -Product Talk -NoShortcut -ReuseRuntime:$same
