@@ -35,6 +35,8 @@ jobs:
         run: npm run test:talk:desktop
       - name: Memo, calendar, notifications and group rooms
         run: node tests/talk-personal-desktop.cjs
+      - name: Live process, native drag-drop and clipboard image attachments
+        run: node tests/talk-chat-input-desktop.cjs
       - name: Browser friend public website reading and source summaries
         run: node tests/browser-talk-desktop.cjs
       - name: Package complete source
