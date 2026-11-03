@@ -21,6 +21,7 @@ jobs:
       - name: Prepare isolated test dependencies
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path D:\Codex\tmp | Out-Null
           npm ci
           python -m pip install -r requirements.txt
           "NARAE_OFFICE_PYTHON=$((Get-Command python).Source)" >> $env:GITHUB_ENV
