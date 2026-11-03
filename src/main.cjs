@@ -128,6 +128,7 @@ const methods={
  talkNotifications:({enabled})=>{personal.notifications(enabled);if(!enabled)notifications.clear();emit({type:'talkPreferences',notifications:enabled});return enabled;},
  talkCalendar:({date})=>personal.calendar(date),
  talkCalendarWeek:()=>personal.weekCalendar(),
+ talkCopyText:async({text})=>{if(typeof text!=='string'||!text.length||text.length>50000)throw Error('복사할 메시지를 확인하세요.');await clipboard.writeText(text);return true;},
  talkCalendarAdd:({date,text})=>{const value=personal.addEvent(date,text);emit({type:'talkCalendarChanged'});return value;},
  talkCalendarRemove:({date,id})=>{const value=personal.removeEvent(date,id);emit({type:'talkCalendarChanged'});return value;},
  talkProfile:async args=>{idle();const profile=talkStore.save(args);emit({type:'talkProfileChanged',profile});startAgentServices();const pack=talkTools.schoolPack(profile);if(pack&&pack.id!=='cbe')try{await addons.install('messenger_'+pack.id);}catch(error){emit({type:'status',scope:'agent',text:'프로필은 저장했습니다. 메신저 CLI 설치는 친구 추가에서 다시 시도하세요: '+error.message});}return profile;},

@@ -3,6 +3,7 @@ const {taskFor,taskTools,taskStep}=require('./agent-task.cjs');
 const {documentStep}=require('./document-task.cjs');
 const {imageStep}=require('./image-task.cjs');
 const {browserTask}=require('./browser-task.cjs');
+const {ezeduTask}=require('./ezedu-task.cjs');
 const {wxsStep,validateWxsBody}=require('./wxs-task.cjs');
 const schema=properties=>({type:'object',properties,additionalProperties:false});
 const tools=[
@@ -26,7 +27,7 @@ function localCreationResult(prompt,settings,calls,name,output){
 }
 async function runAgent({prompt,context,settings,request,execute,send,signal,history=[],additionalTools=[],baseTools=tools,agentInstructions='',toolDomain=''}){
  const specificAddon=['ezedu','hiclass','movie'].includes(toolDomain),addonTask=specificAddon||additionalTools.some(t=>t.name==='gyomu_movie')&&/영상|동영상|무비|movie|video|자막/i.test(prompt)||additionalTools.some(t=>t.name==='gyomu_ezedu')&&/이지에듀/.test(prompt)||additionalTools.some(t=>t.name==='gyomu_addon_read')&&/하이클래스/.test(prompt);
- const kakaoTask=additionalTools.some(t=>t.name==='gyomu_kakao')&&/카카오|카톡/.test(prompt);const regionalMessenger=additionalTools.some(t=>t.name==='gyomu_regional_messenger')&&/메신저|쪽지|교직원.*연락|대화방/.test(prompt);const web=browserTask(prompt,history,{domain:toolDomain,canBrowse:additionalTools.some(t=>t.name==='gyomu_browser')});let task=web||(!specificAddon&&toolDomain!=='browser'&&additionalTools.some(t=>t.name==='gyomu_browser'||t.name.startsWith('gyomu_cbe_'))?taskFor(prompt,history):null);if((regionalMessenger||kakaoTask)&&task?.area==='cbe')task=null;
+ const kakaoTask=additionalTools.some(t=>t.name==='gyomu_kakao')&&/카카오|카톡/.test(prompt);const regionalMessenger=additionalTools.some(t=>t.name==='gyomu_regional_messenger')&&/메신저|쪽지|교직원.*연락|대화방/.test(prompt);const web=browserTask(prompt,history,{domain:toolDomain,canBrowse:additionalTools.some(t=>t.name==='gyomu_browser')});let task=web||ezeduTask(prompt,{domain:toolDomain,canUse:additionalTools.some(t=>t.name==='gyomu_ezedu')})||(!specificAddon&&toolDomain!=='browser'&&additionalTools.some(t=>t.name==='gyomu_browser'||t.name.startsWith('gyomu_cbe_'))?taskFor(prompt,history):null);if((regionalMessenger||kakaoTask)&&task?.area==='cbe')task=null;
  const documentOnly=!addonTask&&!task&&!regionalMessenger&&!kakaoTask&&(/\.(?:hwpx?|pdf|docx|xlsx?|pptx|csv|txt)$/i.test(context||'')||/한글|HWP|\.(?:hwpx?|pdf|docx|xlsx?|pptx|csv|txt|png|jpe?g|gif|webp)\b|read_image|그림|사진|이미지/i.test(prompt))&&!/브라우저|웹\s*(?:검색|탐색)|웹사이트|사이트\s*(?:열|접속)/.test(prompt);
  const availableTools=taskTools(task,[...baseTools,...additionalTools.filter(t=>!documentOnly||['gyomu_skill_read','gyomu_system_status','gyomu_wxs_attachment'].includes(t.name))]);
  const relevantHistory=['cbe','edufine','neis','portal'].includes(task?.area)&&!/^(계속|응|네|진행|다음|로그인.*완료|보내|사유)/.test(prompt.trim())?[]:history;
@@ -39,8 +40,8 @@ async function runAgent({prompt,context,settings,request,execute,send,signal,his
   const prior=input.at(-1),priorCall=prior?.type==='function_call_output'&&input.find(i=>i.type==='function_call'&&i.call_id===prior.call_id);let pendingRead=false;if(priorCall?.name==='gyomu_wxs_read')try{pendingRead=JSON.parse(prior.output).pending===true;}catch{}if(pendingRead)await require('node:timers/promises').setTimeout(1000,undefined,{signal});
   if(signal.aborted)throw new Error('작업을 중지했습니다. 완료된 변경은 유지됩니다.');send({type:'status',text:turn?'결과를 확인하고 있습니다…':'AI에 요청하고 있습니다…'});
   let step=taskStep(task,input,availableTools);
-  if(task?.area!=='web'&&!step.context?.nativeDialog&&!step.receipt)step=wxsStep(prompt,input,step,task);
-  if(!['web','draft-cycle','requisition'].includes(task?.area)&&!step.context?.nativeDialog&&!step.receipt)step=documentStep(prompt,input,availableTools,settings.workspace,!task&&!/수정|편집|여러|각각|비교|요약|첨부|전송|보내/.test(prompt),context)||step;
+  if(!['web','ezedu'].includes(task?.area)&&!step.context?.nativeDialog&&!step.receipt)step=wxsStep(prompt,input,step,task);
+  if(!['web','ezedu','draft-cycle','requisition'].includes(task?.area)&&!step.context?.nativeDialog&&!step.receipt)step=documentStep(prompt,input,availableTools,settings.workspace,!task&&!/수정|편집|여러|각각|비교|요약|첨부|전송|보내/.test(prompt),context)||step;
   if(!task&&!step.required&&!step.receipt)step=imageStep(prompt,input,availableTools,settings.workspace,context)||step;
   if(step.receipt){send({type:'text',text:step.receipt});return step.receipt;}
   if(task?.area==='web'&&settings.provider==='local'&&step.webDocuments)return require('./browser-report.cjs').browserReport({documents:step.webDocuments,task,prompt,request,send,signal});

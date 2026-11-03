@@ -9,6 +9,7 @@ const {cycleTask,cycleStep}=require('./draft-cycle.cjs');
 const {queryTask,queryStep}=require('./office-query-task.cjs');
 const {requisitionTask,requisitionStep}=require('./requisition-task.cjs');
 const {browserStep}=require('./browser-task.cjs');
+const {ezeduStep}=require('./ezedu-task.cjs');
 const school=/나이스|NEIS|복무|조퇴|연가|근무상황|개인결재선|기안문서상신|업무\s*포[털탈]/i;
 const navigationLabel=label=>String(label||'').replace(/\s/g,'').replace(/\(새창열림\)$/,'').replace(/^선택됨,/,'');
 function taskFor(prompt,history=[],now=new Date()){
@@ -37,7 +38,7 @@ function taskFor(prompt,history=[],now=new Date()){
  const result={area:neis?'neis':'portal',openPortal:/업무\s*포[털탈]/.test(prompt)&&/열어|띄워|접속|들어가/.test(prompt),loginIntent:/인증서.*로그인/.test(prompt)&&/눌러|누르|클릭/.test(prompt),openOnly:!neis&&!/에듀파인|공람|공문|기안/.test(prompt),mixed,draft:/초안|준비|신청|올려|등록/.test(text),plan:{date:day,endDate,start:times.length===2?times[0]:null,end:times.length===2?times[1]:null,reason,type:/조퇴/.test(text)?'조퇴':/연가/.test(text)?'연가':null},observe:!/(?:사용법|방법|절차|설명해|가능해[?？]?$|할 수 있(?:어|나요|습니까)[?？]?$)/.test(prompt),instructions:`현재 기준일은 ${date}, 시간대 Asia/Seoul이다. 내일/모레는 이 날짜로 계산한다. 아래 절차는 이미 제공되었으므로 같은 스킬을 반복 조회하지 않는다.\n`+fs.readFileSync(path.join(__dirname,'../resources/agent-skills/neis.md'),'utf8')};
  return final?{...final,...(result.plan.type?{preparation:{...result,draft:true}}:{})}:result;
 }
-function taskTools(task,all){if(task?.area==='web')return all.filter(t=>t.name==='gyomu_browser');if(task?.area==='requisition')return all.filter(t=>t.name==='gyomu_edufine_requisition');if(task?.area==='office-query')return all.filter(t=>t.name===task.name);if(task?.area==='draft-cycle')return all;if(task?.area==='benchmark')return all.filter(t=>t.name==='gyomu_office_benchmark');if(task?.area==='portal-login')return all.filter(t=>t.name==='gyomu_portal_login');all=all.filter(t=>t.name!=='gyomu_portal_login');if(task?.area==='school-final')return schoolFinalTools(all,task);if(task?.area==='session')return all.filter(t=>t.name==='gyomu_portal_session');if(task?.area==='edufine')return edufineTools(all,task);if(task?.area==='cbe')return messengerTools(all);if(!task||task.mixed)return all;return all.filter(t=>['gyomu_browser','gyomu_portal_open','gyomu_portal_session','gyomu_skill_read','gyomu_system_status'].includes(t.name));}
+function taskTools(task,all){if(task?.area==='ezedu')return all.filter(t=>['gyomu_addon_read','gyomu_ezedu'].includes(t.name));if(task?.area==='web')return all.filter(t=>t.name==='gyomu_browser');if(task?.area==='requisition')return all.filter(t=>t.name==='gyomu_edufine_requisition');if(task?.area==='office-query')return all.filter(t=>t.name===task.name);if(task?.area==='draft-cycle')return all;if(task?.area==='benchmark')return all.filter(t=>t.name==='gyomu_office_benchmark');if(task?.area==='portal-login')return all.filter(t=>t.name==='gyomu_portal_login');all=all.filter(t=>t.name!=='gyomu_portal_login');if(task?.area==='school-final')return schoolFinalTools(all,task);if(task?.area==='session')return all.filter(t=>t.name==='gyomu_portal_session');if(task?.area==='edufine')return edufineTools(all,task);if(task?.area==='cbe')return messengerTools(all);if(!task||task.mixed)return all;return all.filter(t=>['gyomu_browser','gyomu_portal_open','gyomu_portal_session','gyomu_skill_read','gyomu_system_status'].includes(t.name));}
 function formReady(plan,observed){
  const fields=(observed.elements||[]).map(e=>({label:e.label.replace(/[\s()]/g,'').split(',')[0],value:String(e.value??e.display??'').trim()}));
  const matches=(pattern,value)=>{const found=fields.filter(e=>pattern.test(e.label));return Boolean(value&&found.length&&found.every(e=>{const current=e.value.replace(/[\s./:\-시분]/g,''),expected=value.replace(/[\s./:\-]/g,'');return current===expected||/^\d{1,2}$/.test(current)&&/^\d{1,2}$/.test(expected)&&Number(current)===Number(expected);}));};
@@ -51,6 +52,7 @@ function fieldMatches(label,current,expected){
  return actual===wanted||/^\d{1,2}$/.test(actual)&&/^\d{1,2}$/.test(wanted)&&Number(actual)===Number(wanted);
 }
 function taskStep(task,input,all){
+ if(task?.area==='ezedu')return ezeduStep(task,input,all);
  if(task?.area==='requisition')return requisitionStep(task,input,all);
  if(task?.area==='office-query')return queryStep(task,input,all);
  if(task?.area==='draft-cycle')return cycleStep(task,input,all);
