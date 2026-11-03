@@ -9,7 +9,7 @@ function ezeduTask(prompt,{domain='',canUse=false,now=new Date()}={}){
  else if(/이번\s*주|금주|다음\s*주|차주|지난\s*주|전주/.test(prompt)){base.setUTCDate(base.getUTCDate()-(base.getUTCDay()+6)%7+(/다음\s*주|차주/.test(prompt)?7:/지난\s*주|전주/.test(prompt)?-7:0));const weekday=prompt.match(/([월화수목금토일])요일/);if(weekday)base.setUTCDate(base.getUTCDate()+'월화수목금토일'.indexOf(weekday[1]));from=iso(base);if(!weekday)base.setUTCDate(base.getUTCDate()+6);to=iso(base);}
  else if(/이번\s*(?:달|월)|다음\s*달|지난\s*달|\d{1,2}\s*월/.test(prompt)){const month=prompt.match(/(?<!\d)(\d{1,2})\s*월/);if(month&&(Number(month[1])<1||Number(month[1])>12))return {area:'ezedu',observe:false,error:'조회할 월을 확인해 주세요.'};base.setUTCDate(1);base.setUTCFullYear(Number(year));base.setUTCMonth(month?Number(month[1])-1:base.getUTCMonth()+(/다음\s*달/.test(prompt)?1:/지난\s*달/.test(prompt)?-1:0));from=iso(base);base.setUTCMonth(base.getUTCMonth()+1,0);to=iso(base);}
  else{const weekday=prompt.match(/([월화수목금토일])요일/);if(weekday)base.setUTCDate(base.getUTCDate()-(base.getUTCDay()+6)%7+'월화수목금토일'.indexOf(weekday[1]));else base.setUTCDate(base.getUTCDate()+(/모레/.test(prompt)?2:/내일/.test(prompt)?1:/어제/.test(prompt)?-1:0));from=to=iso(base);}
- return {area:'ezedu',observe:false,from,to,kind:/개인/.test(prompt)?'personal':/학교/.test(prompt)?'school':/그룹/.test(prompt)?'group':/복무기타/.test(prompt)?'other':'all'};
+ return {area:'ezedu',observe:false,from,to,brief:/간단|간략|타이틀|제목\s*만/.test(prompt),kind:/개인/.test(prompt)?'personal':/학교/.test(prompt)?'school':/그룹/.test(prompt)?'group':/복무기타/.test(prompt)?'other':'all'};
 }
 function ezeduStep(task,input,all){
  if(task.error)return {tools:[],receipt:task.error};
@@ -22,8 +22,8 @@ function ezeduStep(task,input,all){
  if(!query)return fixed('gyomu_ezedu',{operation:'list',from:task.from,to:task.to,kind:task.kind},'사용자가 요청한 기간과 범위의 이지에듀 일정을 한 번 조회한다. 날짜를 생략하거나 같은 안내를 다시 읽지 않는다.');
  const value=query.value;if(value.error)return {tools:[],receipt:'이지에듀 일정 조회를 완료하지 못했습니다. '+value.error+'\n조회나 등록을 반복하지 않았습니다.'};
  if(value.from!==task.from||value.to!==task.to||!Array.isArray(value.events)||value.events.some(event=>typeof event.date!=='string'||event.date<task.from||event.date>task.to)||Number(value.count)!==value.events.length)return {tools:[],receipt:'이지에듀 응답의 조회 기간 또는 일정 목록을 확인하지 못했습니다. 요청 기간 전체를 조회했다고 처리하지 않았습니다.'};
- const lines=['이지에듀 일정 · '+task.from+' ~ '+task.to,'조회 '+value.events.length+'건'];let length=lines.join('\n').length,shown=0;
- for(const event of value.events){const line='\n'+event.date+(event.category?' ['+event.category+']':'')+' '+String(event.title||'제목 없음')+(event.detail?'\n'+String(event.detail):'');if(length+line.length>38000)break;lines.push(line);length+=line.length;shown++;}
+ const lines=task.brief&&value.events.length?[]:['이지에듀 일정 · '+task.from+' ~ '+task.to,'조회 '+value.events.length+'건'];let length=lines.join('\n').length,shown=0;
+ for(const event of value.events){const line=(task.brief?'':'\n')+event.date+(event.category?' ['+event.category+']':'')+' '+String(event.title||'제목 없음')+(!task.brief&&event.detail?'\n'+String(event.detail):'');if(length+line.length>38000)break;lines.push(line);length+=line.length;shown++;}
  if(!value.events.length)lines.push('\n해당 기간에 조회된 일정이 없습니다.');if(shown<value.events.length)lines.push('\n표시 분량을 넘어 '+(value.events.length-shown)+'건을 생략했습니다.');return {tools:[],receipt:lines.join('\n')};
 }
 module.exports={ezeduTask,ezeduStep};

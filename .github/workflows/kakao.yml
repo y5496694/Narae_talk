@@ -43,6 +43,8 @@ jobs:
         run: node tests/talk-chat-input-desktop.cjs
       - name: Browser friend public website reading and source summaries
         run: node tests/browser-talk-desktop.cjs
+      - name: Browser navigation, approval status and cancellation isolation
+        run: node tests/browser-navigation-desktop.cjs
       - name: Package complete source
         run: npm run package
       - name: Upload sanitized synthetic verification only

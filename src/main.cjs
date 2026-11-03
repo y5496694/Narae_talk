@@ -70,17 +70,20 @@ const integrations=talk?new OfficeIntegrations({home,root,python,workspace:()=>s
 const kakaoDesktop=talk?new (require('./kakao-desktop.cjs').KakaoDesktop)({root,home,python,enabled:()=>true}):null;
 if(talk)integrations.kakao=kakaoDesktop;
 const scheduler=talk?new (require('./office-cron.cjs').OfficeCron)({home,execute:agentChat,canRun:()=>!controller&&!connectionChange,deliver:(text,meta)=>kakaoDesktop.deliver(text,meta),notify:state=>emit({type:'cron',state})}):null;
-let integrationSession='local',resetting=Promise.resolve();
-const agentSession=()=>activeAgentChannel==='telegram'&&telegram?.session()?telegram.session():remote?.state==='approved'&&remote.credentials?remote.credentials.id:'local';
+// A friend conversation hash is not a remote device identity. Approval/status
+// notifications must not revoke a running friend task merely because they differ.
+let integrationSession='local',remoteSession='local',resetting=Promise.resolve();
+const kakaoSession=()=>remote?.state==='approved'&&remote.credentials?remote.credentials.id:'local';
+const agentSession=()=>activeAgentChannel==='telegram'&&telegram?.session()?telegram.session():kakaoSession();
 function agentState(){const friendSession=talkSession(activeFriend,agentSession());return {...conversations.read(friendSession),friend:activeFriend,session:agentSession(),running:Boolean(controller),model:settings.model,linked:agentSession()!=='local',viewChannel:activeAgentChannel,telegramLinked:Boolean(telegram?.session()),channel:{name:'나래',searchId:'narae_bot',url:'https://pf.kakao.com/_xjgxfWX',chatUrl:'https://pf.kakao.com/_xjgxfWX/chat'}};}
 function agentChanged(){emit({type:'agentConversation',agent:agentState()});}
 async function agentChat(prompt,{signal,sessionId=agentSession(),origin='pc',friendId='narae',progress=()=>{}}={}){
  idle();if(!talkStore?.read())throw new Error('먼저 이름을 입력하고 나래톡을 시작하세요.');
- sessionId=talkSession(friendId,sessionId);
+ const channelSession=sessionId;sessionId=talkSession(friendId,sessionId);
  const target=await talkTarget(friendId),members=target.members||[talkStore.canonical(friendId)],allTools=await integrations.tools({allRegions:true}),filter=list=>list.filter(tool=>members.some(id=>talkTools.permits(id,tool.name)));
  if(typeof prompt!=='string'||!prompt.trim()||prompt.length>4000)throw new Error('요청을 1~4000자로 입력하세요.');
  const config=structuredClone(settings);if(!config.model)throw new Error('AI 설정에서 모델을 선택하세요.');
- approvalChannel=origin==='telegram'||origin==='pc'&&activeAgentChannel==='telegram'?'telegram':'kakao';const localController=startTask();const relayAbort=()=>localController.abort();signal?.addEventListener('abort',relayAbort,{once:true});if(signal?.aborted)relayAbort();const localSignal=localController.signal;broadcast({type:'talkProgress',friend:friendId,progress:taskProgress.start(friendId)});
+ approvalChannel=origin==='telegram'||origin==='pc'&&activeAgentChannel==='telegram'?'telegram':'kakao';const localController=startTask();localController.channelSession=channelSession;const relayAbort=()=>localController.abort();signal?.addEventListener('abort',relayAbort,{once:true});if(signal?.aborted)relayAbort();const localSignal=localController.signal;broadcast({type:'talkProgress',friend:friendId,progress:taskProgress.start(friendId)});
  let denied;const files=[];
  try{
   if(integrationSession!==sessionId){resetting=resetting.then(()=>integrations.reset({keepBrowser:true}));integrationSession=sessionId;}const previous=conversations.history(sessionId);conversations.append(sessionId,'user',prompt,origin);agentChanged();
@@ -93,7 +96,7 @@ async function agentChat(prompt,{signal,sessionId=agentSession(),origin='pc',fri
  }finally{signal?.removeEventListener('abort',relayAbort);remotePolicy.close();integrations.region=undefined;taskProgress.finish();localController.finish();broadcast({type:'talkProgress',friend:friendId,progress:null});agentChanged();}
 }
 async function remoteChat(prompt,options){const status=await kakaoDesktop.status();if(!status.ready)throw Error(status.message);if(!/^[a-f0-9]{32}$/.test(options.sessionId))throw new Error('REMOTE_SESSION');return agentChat(prompt,{...options,origin:'kakao'});}
-if(talk)try{remote=new KakaoConnector({store:new KeyStore(home,python,'kakao-device'),ledgerFile:path.join(home,'data/kakao-jobs.json'),execute:remoteChat,notify:event=>{const session=agentSession();if(integrationSession!==session){if(integrationSession!=='local'){controller?.abort();resetting=resetting.then(()=>integrations.reset({keepBrowser:true}));}integrationSession=session;}emit(event);agentChanged();},canRun:()=>!controller&&!connectionChange&&settings.kakaoProgram===true,conversation:session=>conversations.read(session),schedules:()=>scheduler.summary(),deliverOutput:(text,meta)=>kakaoDesktop.deliver(text,meta),allowLoopback:process.env.NARAE_KAKAO_ALLOW_LOOPBACK==='1'});integrationSession=agentSession();}catch{remoteSetupError='카카오 기기 저장소를 읽지 못했습니다. 연결 해제 후 다시 연결하세요.';}
+if(talk)try{remote=new KakaoConnector({store:new KeyStore(home,python,'kakao-device'),ledgerFile:path.join(home,'data/kakao-jobs.json'),execute:remoteChat,notify:event=>{const session=kakaoSession();if(remoteSession!==session){const previous=remoteSession;remoteSession=session;if(previous!=='local'&&(!controller||controller.channelSession===previous)){controller?.abort();resetting=resetting.then(()=>integrations.reset({keepBrowser:true}));integrationSession='local';}}emit(event);agentChanged();},canRun:()=>!controller&&!connectionChange&&settings.kakaoProgram===true,conversation:session=>conversations.read(session),schedules:()=>scheduler.summary(),deliverOutput:(text,meta)=>kakaoDesktop.deliver(text,meta),allowLoopback:process.env.NARAE_KAKAO_ALLOW_LOOPBACK==='1'});remoteSession=kakaoSession();}catch{remoteSetupError='카카오 기기 저장소를 읽지 못했습니다. 연결 해제 후 다시 연결하세요.';}
 if(talk)try{const {TelegramBot}=require('./telegram-bot.cjs');telegram=new TelegramBot({home,store:new KeyStore(home,python,'telegram-bot'),workspace:()=>settings.workspace,execute:agentChat,canRun:()=>!controller&&!connectionChange,notify:event=>{if(event.telegram.linked)activeAgentChannel='telegram';emit(event);agentChanged();}});}catch{emit({type:'error',text:'텔레그램 저장소를 읽을 수 없습니다. 현재 Windows 사용자로 다시 연결하세요.'});}
 let agentServicesStarted=false;function startAgentServices(){if(!talk||agentServicesStarted||!talkStore.read())return;agentServicesStarted=true;remote?.start();telegram?.start();scheduler?.start();}
 function remoteState(){return remote?remote.status():{state:'disconnected',error:remoteSetupError};}
