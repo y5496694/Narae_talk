@@ -15,9 +15,9 @@ try {
     if($old -and -not $old.WaitForExit(120000)){throw '앱이 종료되지 않아 업데이트를 중단했습니다.'}
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
     function Dependency-Plan([string]$folder){
-        $plan=Get-Content -LiteralPath (Join-Path $folder 'package-lock.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-        $plan.PSObject.Properties.Remove('version');$plan.packages.''.PSObject.Properties.Remove('version')
-        return ($plan | ConvertTo-Json -Depth 100 -Compress)
+        $plan=& (Join-Path $appRoot 'runtime\node\node.exe') (Join-Path $source 'src\update-dependencies.cjs') (Join-Path $folder 'package-lock.json')
+        if($LASTEXITCODE -ne 0){throw 'Dependency comparison failed'}
+        return $plan
     }
     $same=(Dependency-Plan $appRoot) -eq (Dependency-Plan $source)
     foreach($name in @('requirements.txt','scripts/runtime-downloads.json')){if((Get-FileHash -LiteralPath (Join-Path $appRoot $name)).Hash -ne (Get-FileHash -LiteralPath (Join-Path $source $name)).Hash){$same=$false}}
