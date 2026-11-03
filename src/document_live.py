@@ -58,7 +58,7 @@ def running_apps(include_hidden=False):
             pass
 
 
-def documents():
+def documents(include_selection=True):
     for kind, app in running_apps():
         try:
             collection = app.XHwpDocuments
@@ -79,7 +79,7 @@ def documents():
                         extra["modified"] = bool(item.Modified)
                     except (pythoncom.com_error, AttributeError):
                         extra["modified"] = None
-                if kind == "hwp" and is_active:
+                if kind == "hwp" and is_active and include_selection:
                     try:
                         selected = tuple(app.GetSelectedPos())
                         if len(selected) == 7 and selected[0]:
@@ -102,7 +102,7 @@ def documents():
                         pass
                 yield kind, item, {"format": kind, "file_name": Path(filename).name, "local_path": filename,
                                    "document_id": hashlib.sha256(filename.lower().encode()).hexdigest()[:20],
-                                   "is_active_document": is_active,"is_active_in_application":is_active, "is_foreground": bool(hwnd and win32gui.GetForegroundWindow() == hwnd), "hwnd": hwnd,
+                                   "is_active_document": is_active,"is_active_in_application":is_active, "is_foreground": bool(is_active and hwnd and win32gui.GetForegroundWindow() == hwnd), "hwnd": hwnd,
                                    "pid": win32process.GetWindowThreadProcessId(hwnd)[1] if hwnd and win32gui.IsWindow(hwnd) else None, **extra}
         except (pythoncom.com_error, AttributeError):
             continue
@@ -201,7 +201,7 @@ def run(request):
             win32gui.SetWindowPos(window, 0, x, y, width, height, win32con.SWP_NOACTIVATE | win32con.SWP_NOZORDER)
         return {"success": True, "documentRect": win32gui.GetWindowRect(hwnd), "inlineRect": win32gui.GetWindowRect(inline_hwnd)}
     if request["action"] == "list":
-        items = [info for _, _, info in documents()]
+        items = [info for _, _, info in documents(include_selection=not request.get('skip_selection'))]
         selected = {kind: next((item.get("selected_region") for item in items if item["format"] == kind and item["is_active_document"]), None) for kind in ("hwp", "word", "excel")}
         return {"open_document_list": items, "selected_region_by_format": selected,
                 "primary_active_format": next((item["format"] for item in items if item["is_active_document"]), None),

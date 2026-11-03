@@ -38,6 +38,7 @@ function verifiedTextChange(prompt,records,edit,read,same){
 function documentStep(prompt,input,all,workspace,allowReceipt=false,selectedFile){
  const records=[];for(const item of input){if(item.type!=='function_call_output')continue;const call=input.find(c=>c.type==='function_call'&&c.call_id===item.call_id);if(!call)continue;try{records.push({name:call.name,args:JSON.parse(call.arguments),value:JSON.parse(item.output)});}catch{}}
  if(records.some(r=>r.value?.finalAction||/^wxs-final/.test(r.value?.kind||'')))return null;
+ if(require('./document-summary.cjs').wantsSummary(prompt)&&typeof selectedFile==='string'&&!records.some(r=>['read_document','read_live_document'].includes(r.name)&&r.args.path===selectedFile)){const tool=structuredClone(all.find(t=>t.name==='read_document'));if(tool){tool.parameters={type:'object',properties:{path:{type:'string',enum:[selectedFile]},offset:{type:'integer',enum:[0]},limit:{type:'integer',enum:[60]}},required:['path','offset','limit'],additionalProperties:false};return {tools:[tool],required:true,instructions:'선택한 실제 문서의 처음부터 본문을 읽고, hasMore가 있으면 끝까지 이어 읽은 뒤 요약하세요.'};}}
  const latest=records.at(-1),continuation=latest?.value;
  if(latest?.name==='read_document'&&continuation?.error&&/\.(?:pdf|docx|xlsx?|pptx|csv|txt)$/i.test(latest.args.path||'')){
   const tool=structuredClone(all.find(t=>t.name==='gyomu_wxs_attachment'));if(tool){const values={path:latest.args.path,chars:1500};tool.parameters={type:'object',properties:{path:{type:'string',enum:[values.path]},chars:{type:'integer',enum:[1500]}},required:['path','chars'],additionalProperties:false};return {tools:[tool],required:true,instructions:'이 파일은 HWP/HWPX가 아니다. 같은 작업 폴더 파일을 형식별 저장 첨부 읽기 도구로 확인한다. 읽기 오류를 내용 없음으로 처리하지 않는다.'};}
@@ -52,11 +53,11 @@ function documentStep(prompt,input,all,workspace,allowReceipt=false,selectedFile
   const tool=structuredClone(all.find(t=>t.name===latest.name));
   if(tool){const values={path:latest.args.path,offset:continuation.nextOffset,...(latest.name==='read_document'?{limit:60}:{chars:1500})};tool.parameters={type:'object',properties:Object.fromEntries(Object.entries(values).map(([k,v])=>[k,{type:typeof v==='number'?'integer':'string',enum:[v]}])),required:Object.keys(values),additionalProperties:false};return {tools:[tool],required:true,context:{source:'실제 읽기 결과에 남은 본문이 있음',path:latest.args.path,nextOffset:continuation.nextOffset},instructions:'같은 파일의 아직 읽지 않은 다음 범위를 이어 읽는다. 부분 읽기를 전체 확인으로 보고하지 않는다.'};}
  }
- if(/요약/.test(prompt)&&!/수정|편집|바꾸|변경|만들|생성|첨부(?:해|하)|기안|상신|에듀파인|공문|메신저|쪽지|소통|나이스|복무/.test(prompt)&&['read_document','gyomu_wxs_attachment'].includes(latest?.name)&&!continuation?.hasMore&&continuation?.textDetailsLoaded!==false){
+ if(require('./document-summary.cjs').wantsSummary(prompt)&&!/수정|편집|바꾸|변경|만들|생성|첨부(?:해|하)|기안|상신|에듀파인|공문|메신저|쪽지|소통|나이스|복무/.test(prompt)&&['read_document','gyomu_wxs_attachment'].includes(latest?.name)&&!continuation?.hasMore&&continuation?.textDetailsLoaded!==false){
   const reads=records.filter(r=>r.name===latest.name&&r.args.path===latest.args.path),good=reads.filter(r=>!r.value.error&&r.value.source_unchanged!==false&&!r.value.needs_visual_review),paragraphs=[...new Map(good.flatMap(r=>r.value.paragraphs||[]).map(p=>[p.id,p])).values()],text=latest.name==='read_document'?paragraphs.map(p=>p.text).join('\n'):good.sort((a,b)=>(a.args.offset||0)-(b.args.offset||0)).map(r=>r.value.text||'').join('');
   let next=0;const contiguous=good.every(r=>{const offset=r.value.offset??r.args.offset??0,ok=offset===next;next=offset+(r.value.text||'').length;return ok;});
   const complete=latest.name==='read_document'?good.length===reads.length&&paragraphs.length===continuation?.counts?.paragraphs:good.length===reads.length&&contiguous;
-  return {tools:[],evidenceReport:true,context:{documents:[{title:latest.args.path,bodyRead:Boolean(text),body:text,attachments:[]}],unconfirmed:good.length<reads.length?[{title:latest.args.path,error:continuation?.error||'원본 변경·시각 확인·읽기 실패'}]:[]},footer:'파일 읽기 범위: '+(complete?'확인한 텍스트 범위 끝까지 조회':'일부 범위만 확인')+'. 그림·도장 등 시각 요소는 별도 확인 대상입니다.',instructions:'실제 조회한 파일 텍스트만 원문 근거로 요약한다.'};
+  return {tools:[],evidenceReport:true,documentSummary:{complete,verify:{name:latest.name,args:{path:latest.args.path,offset:0,...(latest.name==='read_document'?{limit:1}:{chars:1})},revision:continuation.hash||continuation.input_sha256||continuation.sha256,key:latest.name==='read_document'?'input_sha256':'sha256'}},context:{documents:[{title:latest.args.path,bodyRead:Boolean(text),body:text,attachments:[]}],unconfirmed:good.length<reads.length?[{title:latest.args.path,error:continuation?.error||'원본 변경·시각 확인·읽기 실패'}]:[]},footer:'파일 읽기 범위: '+(complete?'확인한 텍스트 범위 끝까지 조회':'일부 범위만 확인')+'. 그림·도장 등 시각 요소는 별도 확인 대상입니다.',instructions:'실제 조회한 파일 텍스트만 원문 근거로 요약한다.'};
  }
  const tracked=records.findLast(r=>r.name==='read_document'&&!r.value?.error&&r.value?.textDetailsLoaded===false);
  if(tracked&&typeof tracked.args.path==='string'&&!records.slice(records.indexOf(tracked)+1).some(r=>r.name==='read_live_document'&&r.args.path===tracked.args.path)){
@@ -96,4 +97,4 @@ function documentStep(prompt,input,all,workspace,allowReceipt=false,selectedFile
  const target=names.length?(path.isAbsolute(names[0][1])?names[0][1]:path.resolve(workspace||path.dirname(file),names[0][1])):file.replace(/\.hwpx?$/i,'.pdf');
  return required('export_pdf',{path:file,target},'사용자가 요청한 PDF 사본은 아직 없다. 실제 export_pdf를 실행한다. 텍스트 답변이나 한글 파일 생성 결과를 PDF 완료 근거로 쓰지 않는다.');
 }
-module.exports={documentStep};
+module.exports={documentStep,textReplacement};

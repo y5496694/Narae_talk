@@ -2,9 +2,17 @@
 import hashlib,json,shutil,sys,uuid
 from pathlib import Path
 import pythoncom
-from hwp_native import application_for,selected_text,apply,style
+from hwp_native import application_for,selected_text,apply,style,style_selected
+
+def selection_info(app):
+    pos=tuple(app.GetSelectedPos())
+    if len(pos)!=7 or not pos[0]:return None
+    text=selected_text(app)
+    return {'type':'text','selected_text':text[:10000],'truncated':len(text)>10000,
+            'start':list(pos[1:4]),'end':list(pos[4:7])}
 
 def read(app,file):
+    selection=selection_info(app)
     mode=app.GetMessageBoxMode()
     try:
         app.SetMessageBoxMode(0x00010000)
@@ -13,6 +21,7 @@ def read(app,file):
     return {'path':str(file),'text':text[:300000],'truncated':len(text)>300000,
             'liveRevision':hashlib.sha256(text.encode('utf-8')).hexdigest(),
             'pages':int(app.PageCount),'modified':bool(app.XHwpDocuments.Active_XHwpDocument.Modified),
+            'selection':selection,
             'note':'현재 열린 한글의 텍스트입니다. 표와 서식은 실제 한글에서 보존합니다. 반복되는 문구는 expected_count와 occurrence로 지정하세요.'}
 
 def select_text(app,text,expected,occurrence):
@@ -45,29 +54,69 @@ def run(req):
     app,doc=application_for(file)
     current=read(app,file)
     if req['action']=='read':return current
+    if req['action']=='preview':
+        from hangul_preview import print_open_document
+        target=Path(req['target']).resolve()
+        if target.suffix.lower()!='.pdf' or target.exists():raise ValueError('새 PDF 미리보기 경로가 필요합니다.')
+        before_hash=hashlib.sha256(file.read_bytes()).hexdigest()
+        position,selection=tuple(app.GetPos()),tuple(app.GetSelectedPos())
+        try:
+            result=print_open_document(app,target)
+            after=read(app,file)
+            if after['liveRevision']!=current['liveRevision'] or hashlib.sha256(file.read_bytes()).hexdigest()!=before_hash:
+                raise ValueError('미리보기 중 원본 내용이 변경되었습니다. 다시 확인하세요.')
+            if after['modified']!=current['modified']:raise ValueError('미리보기 중 한글의 저장 상태가 바뀌었습니다.')
+            return {**result,'liveRevision':current['liveRevision'],'source_unchanged':True,'live':True}
+        finally:
+            app.SetPos(*position)
+            if len(selection)==7 and selection[0] and selection[1]==selection[4]:app.SelectText(selection[2],selection[3],selection[5],selection[6])
     if req.get('liveRevision')!=current['liveRevision']:raise ValueError('열린 문서가 바뀌었습니다. 다시 읽은 뒤 편집하세요.')
     position=tuple(app.GetPos());selection=tuple(app.GetSelectedPos())
     backup=Path(req['backupDir'])/(uuid.uuid4().hex+'-'+file.name);backup.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(file,backup)
+    live_backup=None
+    if current['modified']:
+        # Keep the unsaved document as well as the last disk version. Exporting
+        # HWPML does not save, close or replace the user's active document.
+        mode=app.GetMessageBoxMode()
+        try:
+            app.SetMessageBoxMode(0x00010000)
+            snapshot=app.GetTextFile('HWPML2X','')
+        finally:app.SetMessageBoxMode(mode)
+        if not isinstance(snapshot,str) or not snapshot.strip():raise ValueError('미저장 문서의 복구 사본을 만들지 못해 편집하지 않았습니다.')
+        live_backup=str(backup)+'.live.hwpml';Path(live_backup).write_text(snapshot,encoding='utf-8')
     complete=0
     try:
         operations=req.get('operations')
         if not isinstance(operations,list) or not 1<=len(operations)<=40:raise ValueError('편집 작업을 1~40개 지정하세요.')
+        verified_operations=[]
         for op in operations:
-            text=op.get('text','');pos=select_text(app,text,op.get('expected_count',1),op.get('occurrence',0))
-            if op['op']=='replace_text':
+            text=op.get('text','')
+            if op['op'] in {'replace_selection','set_selection_style'}:
+                selected=tuple(app.GetSelectedPos())
+                if len(selected)!=7 or not selected[0] or list(selected[1:4])!=op.get('start') or list(selected[4:7])!=op.get('end') or selected_text(app)!=text:
+                    raise ValueError('선택 영역이 요청 후 변경되었습니다. 한글에서 다시 선택하고 요청하세요.')
+                if not text or len(text)>10000:raise ValueError('선택 영역은 1~10000자로 지정하세요.')
+                pos=selected
+            else:pos=select_text(app,text,op.get('expected_count',1),op.get('occurrence',0))
+            if op['op'] in {'replace_text','replace_selection'}:
                 new=op.get('replacement')
                 if not isinstance(new,str) or len(new)>200000:raise ValueError('바꿀 내용을 확인하세요.')
                 apply(app,'InsertText',{'Text':new})
-            elif op['op']=='set_style':
+                if op['op']=='replace_selection':
+                    end=tuple(app.GetPos())
+                    if end[0]==pos[1]:selection=(True,*pos[1:4],*end)
+            elif op['op'] in {'set_style','set_selection_style'}:
                 # Reuse the native style validator with an exact captured range.
                 target={'text':text,'occurrences':op.get('expected_count',1),'occurrence':op.get('occurrence',0),'position':pos[1:]}
                 allowed={'font_size','font_family','bold','italic','underline','text_color','align'}
                 step={key:value for key,value in op.items() if key in allowed}
-                style(app,step,target)
+                facts=style_selected(app,step,pos) if op['op']=='set_selection_style' else style(app,step,target)
+                verified_operations.append({'op':op['op'],'properties':facts['properties']})
             else:raise ValueError('지원하지 않는 네이티브 편집 작업입니다.')
             complete+=1
         if req.get('save',True) and not doc.Save(True):raise ValueError('저장 결과를 확인하지 못했습니다.')
-        return {**read(app,file),'saved':req.get('save',True),'completed':complete,'backup':str(backup)}
+        return {**read(app,file),'saved':req.get('save',True),'completed':complete,'verified':True,
+                'verifiedOperations':verified_operations,'backup':str(backup),'liveBackup':live_backup}
     except Exception as error:
         raise ValueError(f'{error}\n완료한 작업: {complete}/{len(req.get("operations",[]))}. 열린 문서에 일부 변경이 남을 수 있습니다. 백업: {backup}') from error
     finally:
@@ -79,6 +128,14 @@ def run(req):
 
 if __name__=='__main__':
     pythoncom.CoInitialize()
-    try:print(json.dumps({'ok':True,'data':run(json.load(sys.stdin))},ensure_ascii=False))
+    import win32event,win32api
+    guard=win32event.CreateMutex(None,False,'Local\\NaraeOffice.HwpAutomation.v1');acquired=False
+    try:
+        state=win32event.WaitForSingleObject(guard,30000)
+        acquired=state in (win32event.WAIT_OBJECT_0,win32event.WAIT_ABANDONED)
+        if not acquired:raise ValueError('다른 한글 작업이 진행 중입니다. 잠시 후 다시 시도하세요.')
+        print(json.dumps({'ok':True,'data':run(json.load(sys.stdin))},ensure_ascii=False))
     except Exception as error:print(json.dumps({'ok':False,'error':str(error)},ensure_ascii=False));sys.exit(1)
-    finally:pythoncom.CoUninitialize()
+    finally:
+        if acquired:win32event.ReleaseMutex(guard)
+        win32api.CloseHandle(guard);pythoncom.CoUninitialize()

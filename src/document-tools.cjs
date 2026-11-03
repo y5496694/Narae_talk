@@ -1,6 +1,7 @@
 'use strict';
 // GUI and headless agents use the same document CLI and verification contract.
 const fs=require('node:fs'),path=require('node:path');
+const visualPreviews=new Map();
 const supportedFile=/\.(?:hwpx?|png|jpe?g|gif|webp|pdf|docx|xlsx?|pptx|csv|txt)$/i;
 function creation(args){
  const copy={...args};if(copy.blocks){if(copy.notice&&!JSON.stringify(copy.blocks).includes(copy.notice))copy.blocks=[...copy.blocks,{type:'paragraph',text:copy.notice}];return copy;}
@@ -12,6 +13,7 @@ function creation(args){
 }
 async function executeDocumentTool(name,args,{workspace,home,python,signal,execute=require('./cli.cjs').execute}={}){
  if(signal?.aborted)throw new Error('작업을 중지했습니다.');
+ if(name==='inspect_document_visuals'){const key=home+'|'+python;let preview=visualPreviews.get(key);if(!preview){const {NativeDocuments}=require('./native-documents.cjs'),{HangulPreview}=require('./hangul-preview.cjs');preview=new HangulPreview({native:new NativeDocuments(home,python),home,python});visualPreviews.set(key,preview);}return preview.inspectVisuals(args.path,args);}
  if(name==='list_files')return fs.readdirSync(workspace).filter(f=>supportedFile.test(f)&&fs.statSync(path.join(workspace,f)).isFile()).map(f=>path.join(workspace,f));
  if(name==='read_image')return {kind:'image',path:args.path,image:require('./agent-media.cjs').readImage(args.path)};
  const actions={read_document:'inspect',read_live_document:'live-read',edit_live_document:'live-edit',edit_document:'edit',create_document:'create',export_pdf:'export'};

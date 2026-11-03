@@ -3,8 +3,9 @@ const actions={open:'사이트 여는 중',read:'웹 본문 읽는 중',snapshot
 function toolLabel(name,args={}){if(name==='gyomu_browser')return actions[args.action]||'브라우저 작업 중';if(/^report_/.test(name))return '읽은 자료의 근거 정리 중';if(/read_image/.test(name))return '첨부 이미지 확인 중';if(/read_document|read_live_document/.test(name))return '문서 읽는 중';if(/create_document|edit_|export_pdf/.test(name))return '문서 작업 중';if(/cbe|messenger|kakao/.test(name))return '메신저 작업 중';if(/portal|neis|edufine|wxs/.test(name))return '업무포털 작업 중';if(/addon/.test(name))return '친구 사용 안내 확인 중';return '연결된 도구 실행 중';}
 class TalkProgress{
  constructor(){this.current=null;}
- start(friend){this.current={friend,started:Date.now(),label:'요청을 확인하고 있습니다',steps:[]};return this.snapshot(friend);}
+ start(friend){this.current={friend,started:Date.now(),label:'요청을 확인하고 있습니다',steps:[],plan:null};return this.snapshot(friend);}
  observe(event){const current=this.current;if(!current||event.friend&&event.friend!==current.friend)return null;let label;
+  if(event.type==='taskPlan'&&event.scope==='agent'){current.plan=structuredClone(event.plan);const active=current.plan.tasks.find(t=>t.status==='in_progress'),blocked=current.plan.tasks.find(t=>['blocked','cancelled'].includes(t.status));current.label=active?'진행 중 · '+active.title:blocked?'작업을 멈췄습니다 · '+blocked.title:'작업 목록을 확인하고 있습니다';return this.snapshot(current.friend);}
   if(event.type==='approval')label=event.approval?'작업 승인을 기다리고 있습니다':'작업을 이어가고 있습니다';
   else if(event.scope==='agent'){if(event.type==='tool')label=toolLabel(event.name,event.args);else if(event.type==='toolDone')label='도구 결과를 확인하고 있습니다';else if(event.type==='status')label=String(event.text||'요청을 처리하고 있습니다').slice(0,140);else if(event.type==='error')label='다음 진행 방법을 확인하고 있습니다';}
   if(!label||label===current.label)return null;current.steps=[...current.steps,{label:current.label,at:Date.now()}].slice(-3);current.label=label;return this.snapshot(current.friend);

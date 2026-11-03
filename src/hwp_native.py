@@ -27,7 +27,8 @@ def application_for(file):
     if len(matches) != 1:
         raise ValueError("한글 문서를 하나로 식별할 수 없습니다. 중복으로 열린 사본을 확인하세요.")
     app, doc = matches[0]
-    doc.SetActive_XHwpDocument()
+    if str(app.XHwpDocuments.Active_XHwpDocument.FullName).lower() != target:
+        doc.SetActive_XHwpDocument()
     if str(Path(str(app.XHwpDocuments.Active_XHwpDocument.FullName)).resolve()).lower() != target:
         raise ValueError("현재 한글 문서가 요청한 파일과 다릅니다.")
     return app, doc
@@ -117,6 +118,14 @@ def _select_paragraph(app, target):
 
 
 def style(app, step, target):
+    return _style(app, step, target=target)
+
+
+def style_selected(app, step, selected):
+    return _style(app, step, selected=selected)
+
+
+def _style(app, step, target=None, selected=None):
     char, para = {}, {}
     allowed = {"name", "target_line_id", "font_size", "font_family", "bold", "italic", "underline", "text_color", "align"}
     if set(step) - allowed:
@@ -150,7 +159,8 @@ def style(app, step, target):
         para["AlignType"] = align
     if not char and not para:
         raise ValueError("변경할 서식을 지정하세요.")
-    selected = select_paragraph(app, target)
+    if selected is None:
+        selected = select_paragraph(app, target)
     if char:
         apply(app, "CharShape", char)
     if para:
