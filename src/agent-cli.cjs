@@ -24,7 +24,8 @@ async function status({home=defaultHome(),createAI=options=>new LocalAI(options)
 async function run(job,{base=process.cwd(),home=defaultHome(),signal=new AbortController().signal,onEvent=()=>{},createAI=options=>new LocalAI(options),createIntegrations=options=>new OfficeIntegrations(options),executeDocument}={}){
  const {settings,context}=config(job,base),friend=job.friend||'narae';talkTools.filterTools(friend,[]);try{settings.kakaoProgram=JSON.parse(fs.readFileSync(path.join(home,'data/settings.json'),'utf8')).kakaoProgram===true;}catch{}for(const d of ['cache','logs','data'])fs.mkdirSync(path.join(home,d),{recursive:true});
  const python=require('./runtime-python.cjs').resolvePython(root),policy=new RemotePolicy({workspace:()=>settings.workspace,autoAllow:()=>job.allowChanges===true,notify:view=>{if(view){onEvent({type:'approvalRequired',name:view.name});policy.decide({id:view.id,digest:view.digest,allow:false});}}});
- const ai=createAI({root,home}),integrations=createIntegrations({root,home,python,workspace:()=>settings.workspace,settings:()=>settings,policy,headed:true,busy:()=>true});
+ const addons=process.env.NARAE_PRODUCT==='talk'?new (require('./talk-addons.cjs').TalkAddons)({root,home,python}):null;
+ const ai=createAI({root,home}),integrations=createIntegrations({root,home,python,addons,kakaoCLI:process.env.NARAE_PRODUCT==='talk',workspace:()=>settings.workspace,settings:()=>settings,policy,headed:true,busy:()=>true});
  let denied;
  const execute=async(name,args,toolSignal)=>{
   talkTools.assertTool(friend,name,args);if(denied)throw denied;
@@ -37,7 +38,7 @@ async function run(job,{base=process.cwd(),home=defaultHome(),signal=new AbortCo
   }catch(e){if(e.code==='LOCAL_APPROVAL_DENIED')denied=e;throw e;}
  };
  try{
-  const text=await runAgent({prompt:job.prompt,context,settings,signal,history:job.history||[],request:body=>ai.request({settings,body,signal}),execute,baseTools:talkTools.filterTools(friend,require('./agent.cjs').tools),additionalTools:talkTools.filterTools(friend,await integrations.tools()),send:onEvent,agentInstructions:'현재는 나래톡 CLI입니다. 학교 업무는 해당 gyomu_skill_read 절차를 확인합니다. CLI 변경 허용: '+(job.allowChanges===true?'사용자가 이 작업의 변경을 허용했습니다.':'조회만 허용됩니다. 변경 승인은 거절됩니다.')+' 미리보기와 실제 완료, 조회 범위와 전체 범위를 구분합니다.'});
+  const text=await runAgent({prompt:job.prompt,context,settings,signal,history:job.history||[],toolDomain:friend,request:body=>ai.request({settings,body,signal}),execute,baseTools:talkTools.filterTools(friend,require('./agent.cjs').tools),additionalTools:talkTools.filterTools(friend,await integrations.tools()),send:onEvent,agentInstructions:'현재는 나래톡 CLI입니다. 추가 친구는 gyomu_addon_read로 해당 id의 절차를 확인하고, 포털 업무는 gyomu_skill_read 절차를 확인합니다. CLI 변경 허용: '+(job.allowChanges===true?'사용자가 이 작업의 변경을 허용했습니다.':'조회만 허용됩니다. 변경 승인은 거절됩니다.')+' 미리보기와 실제 완료, 조회 범위와 전체 범위를 구분합니다.'});
   if(denied)throw denied;return {model:settings.model,workspace:settings.workspace,text};
  }finally{policy.close();try{await integrations.close();}finally{await ai.close();}}
 }
