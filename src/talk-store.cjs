@@ -11,7 +11,7 @@ const definitions=[
  {id:'narae',name:'나래',description:'설치된 모든 도구를 함께 사용하는 나의 AI 친구',icon:'narae-original.png',cli:'전체 도구'},
  {id:'hangul',name:'나래한글',description:'한글 문서 읽기 · 작성 · 편집 · PDF',icon:'narae-office.png',cli:'나래한글 CLI'},
  {id:'cbe',name:'충북소통메신저',description:'교직원 검색 · 쪽지 · 대화',icon:'cbe.png',cli:'CBE CLI'},
- {id:'browser',name:'나래 브라우저',description:'웹 탐색 · 페이지 읽기 · 브라우저 조작',icon:'browser.svg',cli:'나래 브라우저 CLI'},
+ {id:'browser',name:'나래 브라우저',description:'웹·뉴스 검색 · 본문 읽기 · 요약·비교',icon:'browser.svg',cli:'나래 브라우저 CLI'},
  {id:'portal',name:'나래교무 업무포털',description:'나이스 · K-에듀파인 · 인증서 로그인',icon:'portal.svg',cli:'나래교무 포털 CLI'},
  {id:'wxs',name:'K-에듀파인 WXS',description:'공문 본문 · 첨부 · 기안',icon:'wxs.svg',cli:'WXS CLI'},
  {id:'kakao',name:'카카오톡',description:'카카오톡 CLI · 대화 조회·검색·전송',icon:'kakao.png',cli:'카카오톡 CLI'},

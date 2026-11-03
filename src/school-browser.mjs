@@ -1,6 +1,6 @@
 // Office integration layer; preserve the vendored browser snapshot.
 import {SchoolBrowser,finalOperation} from '../vendor/narae-gyomu/src/school-browser.mjs';
-import {bound,Fault,browserPath} from '../vendor/narae-gyomu/packages/narae_browser/src/browser.mjs';
+import {BrowserEngine,bound,Fault,browserPath} from '../vendor/narae-gyomu/packages/narae_browser/src/browser.mjs';
 import {chromium} from 'playwright-core';
 import {randomUUID} from 'node:crypto';
 import session from './school-session.cjs';
@@ -98,6 +98,19 @@ export class OfficeSchoolBrowser extends SchoolBrowser {
   const watch=p=>{if(this.pages.includes(p))return;this.pages.push(p);p.on('framenavigated',f=>{if(f===p.mainFrame()&&p===this.page)this.invalidate();});p.on('pageerror',e=>{this.errors.push(e.message.slice(0,200));this.errors=this.errors.slice(-10);});p.on('dialog',d=>d.dismiss().catch(()=>{}));};
   this.context.on('page',watch);for(const p of this.context.pages())watch(p);this.page=this.pages.findLast(p=>/^https?:/.test(p.url()))||this.pages[0]||await this.context.newPage();this.installFinalDialogs();
   return {browser:'chromium',headless:!headed,isolated:true,persistent:true};
+ }
+ async read(args={}){
+  const host=new URL(this.scope().url()).hostname;
+  if(regional.regions.some(r=>[r.portalUrl,r.neisUrl,r.edufineUrl,r.evpnUrl].some(url=>new URL(url).hostname===host)))return super.read(args);
+  const selector=args.selector||await this.scope().evaluate(()=>['#dic_area','article','main','[role=main]'].find(s=>document.querySelector(s))||'body');
+  const result=await BrowserEngine.prototype.read.call(this,{...args,selector});
+  const sourceKind=await this.scope().evaluate(()=>{
+   if(/captcha|access.denied|접근.{0,5}(?:차단|제한)|자동입력 방지/i.test(document.title+' '+(document.body?.innerText||'').slice(0,250)))return 'blocked';
+   if(document.querySelector('#dic_area,article h1')||document.querySelector('meta[property="og:type"]')?.content==='article')return 'article';
+   if(/search\./.test(location.hostname)||/\/search(?:\/|$)/.test(location.pathname))return 'search';
+   return location.pathname==='/'||/\/(?:section|category|list)(?:\/|$)/.test(location.pathname)?'listing':'page';
+  });
+  return {...result,sourceKind};
  }
  async snapshot(args={}){
   this.watchNetwork();

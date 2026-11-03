@@ -35,7 +35,9 @@ jobs:
         run: npm run test:talk:desktop
       - name: Memo, calendar, notifications and group rooms
         run: node tests/talk-personal-desktop.cjs
-      - name: Package source with memo, calendar and group rooms
+      - name: Browser friend public website reading and source summaries
+        run: node tests/browser-talk-desktop.cjs
+      - name: Package complete source
         run: npm run package
       - name: Upload sanitized synthetic verification only
         if: always()
