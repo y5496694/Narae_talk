@@ -1,4 +1,4 @@
-﻿param([string]$InstallRoot,[ValidateSet('Office','Talk')][string]$Product='Talk',[switch]$NoShortcut)
+﻿param([string]$InstallRoot,[ValidateSet('Office','Talk')][string]$Product='Talk',[switch]$NoShortcut,[switch]$ReuseRuntime)
 $talkProduct=$Product -eq 'Talk'
 $productFolder=if($talkProduct){'NaraeTalk'}else{'NaraeHangulOffice'}
 $productName=if($talkProduct){'나래톡'}else{'나래 한글 오피스'}
@@ -36,12 +36,14 @@ try {
     & $node -e "if(!require('./src/hancom.cjs').discoverHancom().hangul){console.error('한컴오피스 한글을 먼저 설치하고 한 번 실행하세요.');process.exit(1)}"
     if($LASTEXITCODE -ne 0){throw '한컴오피스 한글 사전 설치가 필요합니다.'}
     }
+    if(-not $ReuseRuntime -or -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'))){
     Write-Output '데스크톱 런타임 설치 중...'
     & $npm ci --no-audit --no-fund;if($LASTEXITCODE -ne 0){throw 'Electron 설치 실패'}
     & $node (Join-Path $InstallRoot 'node_modules\electron\install.js');if($LASTEXITCODE -ne 0){throw 'Electron 실행 파일 다운로드 실패'}
     Write-Output '나래한글 엔진 의존성 설치 중...'
     & $python -I -m pip install --only-binary=:all: --no-warn-script-location --disable-pip-version-check -r (Join-Path $InstallRoot 'requirements.txt');if($LASTEXITCODE -ne 0){throw 'Python 라이브러리 설치 실패'}
     & (Join-Path $InstallRoot 'scripts\install-ant.ps1') -AppRoot $InstallRoot
+    }
     & $python -I -c "import pythoncom,win32crypt,PySide6,pypdfium2,lxml;print('Python 의존성 확인 완료')";if($LASTEXITCODE -ne 0){throw 'Python 환경 확인 실패'}
     & $node (Join-Path $InstallRoot 'src\local-runtime.cjs');if($LASTEXITCODE -ne 0){throw '로컬 AI 실행기 설치 실패'}
     & $node (Join-Path $InstallRoot 'scripts\install-skills.cjs') $Product;if($LASTEXITCODE -ne 0){throw '에이전트 스킬 설치 실패'}

@@ -16,11 +16,14 @@ const definitions=[
  {id:'wxs',name:'K-에듀파인 WXS',description:'공문 본문 · 첨부 · 기안',icon:'wxs.svg',cli:'WXS CLI'},
  {id:'kakao',name:'카카오톡',description:'카카오톡 CLI · 대화 조회·검색·전송',icon:'kakao.png',cli:'카카오톡 CLI'},
  {id:'gyomu',name:'나래교무',description:'통합 도구 상태 · 업무 스킬 · 기능 안내',icon:'narae-friend.svg',cli:'나래교무 CLI'},
- ...require('./talk-catalog.cjs').catalog.map(({id,name,description,icon,cli})=>({id,name,description,icon,cli,optional:true})),
+ ...require('./talk-catalog.cjs').catalog.filter(f=>f.category!=='messenger').map(({id,name,description,icon,cli})=>({id,name,description,icon,cli,optional:true})),
  {id:'regional',name:'지역 소통메신저',description:'선택한 교육청의 메신저',icon:'messenger.svg',cli:'지역 메신저 CLI'}
 ];
+for(const region of school.regions){const messenger=regionalMessengers.find(r=>r.id===region.id);definitions.push({id:'portal_'+region.id,kind:'portal',dynamic:true,region:region.region,name:'나래교무 포탈('+region.region+')',description:region.label+' · 나이스 · K-에듀파인 · WXS',icon:'portal.svg',cli:'나래교무 포털 CLI',portalUrl:region.portalUrl},{id:'messenger_'+region.id,kind:region.id==='cbe'?'cbe':'regional',dynamic:true,region:region.region,name:messenger.messenger,description:region.label+' · '+(region.id==='cbe'?'교직원 검색 · 쪽지 · 대화':messenger.support==='dedicated-driver-pending'?'전용 CLI 준비 중 · UIA 관찰':'로컬 캐시 조회 · 서버 전송 미검증'),icon:region.id==='cbe'?'cbe.png':require('./talk-catalog.cjs').catalog.find(f=>f.id==='messenger_'+region.id)?.icon||'messenger.svg',cli:region.id==='cbe'?'CBE CLI':'지역 메신저 CLI',support:messenger.support});}
+const definition=id=>definitions.find(f=>f.id===id);
 const common=name=>['gyomu_skill_read','gyomu_system_status'].includes(name);
 function permits(friend,name){
+ friend=definition(friend)?.kind||friend;
  if(friend==='narae')return true;
  if(common(name))return !['ezedu','hiclass','movie'].includes(friend)||name!=='gyomu_skill_read';
  if(friend==='hangul')return !name.startsWith('gyomu_');
@@ -32,14 +35,15 @@ function permits(friend,name){
  if(friend==='movie')return ['gyomu_movie','gyomu_addon_read','read_image'].includes(name);
  if(friend==='wxs')return name.startsWith('gyomu_wxs');
  if(friend==='kakao')return name==='gyomu_kakao';
- if(friend==='regional')return name==='gyomu_regional_messenger';
+ if(friend==='regional')return ['gyomu_regional_messenger','gyomu_addon_read'].includes(name);
  if(friend==='gyomu')return /^gyomu_(office_|capabilit)/.test(name);
  return false;
 }
 function filterTools(friend,tools){if(!definitions.some(f=>f.id===friend))throw Error('친구를 찾을 수 없습니다.');return tools.filter(t=>permits(friend,t.name));}
 function assertTool(friend,name,args={}){
  if(!permits(friend,name))throw Error('이 친구에게 연결되지 않은 도구입니다. 나래 친구에게 요청하세요.');
- if(name==='gyomu_addon_read'&&friend!=='narae'&&args.id!==friend)throw Error('이 친구의 사용 안내만 읽을 수 있습니다.');
+ const original=friend;friend=definition(friend)?.kind||friend;
+ if(name==='gyomu_addon_read'&&friend!=='narae'&&args.id!==original)throw Error('이 친구의 사용 안내만 읽을 수 있습니다.');
  if(name==='gyomu_skill_read'&&friend!=='narae'){
   const scopes={hangul:['hangul','hangul-jobs'],cbe:['cbe'],browser:['overview'],portal:['overview','portal','neis','edufine','wxs'],wxs:['wxs'],kakao:['overview'],gyomu:['overview'],regional:['overview']};
   if(!scopes[friend]?.includes(args.area))throw Error('이 친구의 CLI 사용 안내만 읽을 수 있습니다.');
@@ -56,7 +60,8 @@ class TalkStore{
  syncRegion(value=this.read()){const region=regionFor(value?.region),file=path.join(this.home,'data/school-profile.json');if(region&&(!fs.existsSync(file)||school.state(this.home).region!==region.region))school.configure(this.home,region.region);}
  save(value){value=profile(value);const previous=this.read();if(value.occupation&&!occupations.includes(value.occupation)&&value.occupation!==previous?.occupation)throw Error('직업을 목록에서 선택하세요.');if(value.region&&!regionFor(value.region)&&value.region!==previous?.region)throw Error('지역을 목록에서 선택하세요.');fs.mkdirSync(path.dirname(this.file),{recursive:true});const tmp=this.file+'.'+randomUUID()+'.tmp',schoolFile=path.join(this.home,'data/school-profile.json'),oldSchool=fs.existsSync(schoolFile)?fs.readFileSync(schoolFile):null;try{this.syncRegion(value);fs.writeFileSync(tmp,JSON.stringify(value,null,2),{mode:0o600});fs.renameSync(tmp,this.file);}catch(error){if(oldSchool)fs.writeFileSync(schoolFile,oldSchool);else fs.rmSync(schoolFile,{force:true});throw error;}finally{fs.rmSync(tmp,{force:true});}return value;}
  session(friend,channel='local'){return sessionFor(friend,channel,schoolPack(this.read())?.region);}
- friends(tools,installed=[]){const pack=schoolPack(this.read());return definitions.filter(f=>!['wxs','gyomu'].includes(f.id)&&(!f.optional||installed.includes(f.id))).filter(f=>(!schoolFriends.has(f.id)||pack&&(f.id!=='cbe'||pack.id==='cbe')&&(f.id!=='regional'||pack.id!=='cbe'))&&(['narae','kakao'].includes(f.id)||filterTools(f.id,tools).some(t=>!common(t.name)))).map(f=>({...f,toolCount:filterTools(f.id,tools).filter(t=>!common(t.name)).length,...(schoolFriends.has(f.id)?{region:pack.region,portalUrl:pack.portalUrl,neisUrl:pack.neisUrl,edufineUrl:pack.edufineUrl}:{}),...(f.id==='portal'?{name:'나래교무 포탈('+pack.region+')',description:pack.label+' · 나이스 · K-에듀파인 · WXS'}:{}),...(f.id==='wxs'?{name:'K-에듀파인 WXS ('+pack.region+')'}:{}),...(f.id==='gyomu'?{name:'나래교무 ('+pack.region+')'}:{}),...(f.id==='cbe'||f.id==='regional'?{name:pack.messenger,description:pack.label+' · 교직원 검색 · 쪽지 · 대화'}:{}),...(f.id==='kakao'&&!tools.some(t=>t.name==='gyomu_kakao')?{description:'설정 → 일반에서 카톡 프로그램 사용을 켜세요'}:{})}));}
+ canonical(id){const pack=schoolPack(this.read());return id==='portal'&&pack?'portal_'+pack.id:id==='cbe'?'messenger_cbe':id==='regional'&&pack?'messenger_'+pack.id:id;}
+ friends(tools,installed=[],added=[]){const pack=schoolPack(this.read());const defaults=definitions.filter(f=>!f.dynamic&&!['wxs','gyomu'].includes(f.id)&&(!f.optional||installed.includes(f.id))).filter(f=>(!schoolFriends.has(f.id)||pack&&(f.id!=='cbe'||pack.id==='cbe')&&(f.id!=='regional'||pack.id!=='cbe'))&&(['narae','kakao'].includes(f.id)||filterTools(f.id,tools).some(t=>!common(t.name)))).map(f=>({...f,toolCount:filterTools(f.id,tools).filter(t=>!common(t.name)).length,...(schoolFriends.has(f.id)?{region:pack.region,portalUrl:pack.portalUrl,neisUrl:pack.neisUrl,edufineUrl:pack.edufineUrl}:{}),...(f.id==='portal'?{name:'나래교무 포탈('+pack.region+')',description:pack.label+' · 나이스 · K-에듀파인 · WXS'}:{}),...(f.id==='cbe'||f.id==='regional'?{name:pack.messenger,icon:definition('messenger_'+pack.id).icon,description:definition('messenger_'+pack.id).description}:{})}));return [...defaults,...added.filter(id=>!defaults.some(f=>this.canonical(f.id)===id)).map(definition).filter(f=>f?.dynamic)];}
 }
 // A one-time local copy preserves encrypted credentials without exposing them.
 // Remote connectors are intentionally not copied: only one app may poll a bot.
@@ -78,4 +83,4 @@ function handover(officeHome,talkHome){
  for(const name of ['telegram-bot.bin','telegram.json','kakao-device.bin','kakao-jobs.json','office-cron.json','model-reliability.json']){const source=path.join(officeHome,'data',name),target=path.join(talkHome,'data',name);if(fs.existsSync(source)&&!fs.existsSync(target)){fs.copyFileSync(source,target);copied.push(name);}}
  fs.writeFileSync(marker,JSON.stringify({at:new Date().toISOString(),copied},null,2));return {copied};
 }
-module.exports={TalkStore,definitions,permits,filterTools,assertTool,sessionFor,profile,migrate,handover,profileOptions,schoolPack};
+module.exports={TalkStore,definitions,definition,permits,filterTools,assertTool,sessionFor,profile,migrate,handover,profileOptions,schoolPack};

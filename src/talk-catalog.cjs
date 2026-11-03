@@ -5,4 +5,5 @@ const catalog=[
  {id:'movie',name:'나래 무비 메이커',description:'영상 만들기·편집·자막·렌더링',icon:'movie.svg',cli:'나래 무비메이커 독립 CLI',repository:'https://github.com/y5496694/narae-movie-maker',version:'1.0.0',url:'https://github.com/y5496694/narae-movie-maker/releases/download/v1.0.0/NaraeMovieMaker-CLI-1.0.0-win-x64.zip',bytes:512635239,sha256:'ab05437a42518ae9edc470deadade5265d68082fb43bee7a98417c49d6353404',files:['cli/narae.mjs','runtime/narae-engine.exe','사용설명서.txt'],guides:{guide:'사용설명서.txt'}}
 ];
 function entry(id){const item=catalog.find(item=>item.id===id);if(!item)throw Error('추가할 친구를 찾을 수 없습니다.');return item;}
+catalog.push(...require('../resources/regional-friends.json'));
 module.exports={catalog,entry};

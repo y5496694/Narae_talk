@@ -42,3 +42,6 @@ llama.cpp CPU runtime b11960: https://github.com/ggml-org/llama.cpp · MIT. 공�
 `ui/assets/cbe.png`와 `ui/assets/kakao.png`는 각각 이 PC에 설치된 충북소통메신저(CBE Talk)와 카카오톡 실행 파일에서 추출한 원본 서비스 식별 아이콘입니다. 각 서비스의 권리는 해당 권리자에게 있으며 제휴나 서비스 제공 주체를 뜻하지 않습니다. 설치된 CLI 친구 식별에 사용합니다.
 
 나래 무비 메이커 친구 아이콘은 y5496694/narae-movie-maker의 assets/icons/narae.svg (6773dfe5e2af71a33a7f9e3f6c1ef1d365a72e0f)에서 가져왔습니다. 해당 저장소의 MIT LICENSE와 NOTICE를 따릅니다. 선택 설치 기능은 각 원본 저장소·공식 CLI 배포본을 SHA-256으로 확인하며 포함된 원본 라이선스를 함께 보관합니다.
+
+
+지역 메신저 아이콘(ui/assets/messenger-{goe,gbe,jbe,kwe,gne,jje}.png)은 각 설치된 공식 프로그램의 앱 식별 아이콘입니다. 나래톡의 해당 CLI 친구를 식별하기 위해 사용하며 해당 제품 상표와 아이콘 권리는 원 권리자에게 있습니다. 교육청 메신저 프로그램·설치 파일·개인 캐시는 배포물에 포함하지 않습니다.

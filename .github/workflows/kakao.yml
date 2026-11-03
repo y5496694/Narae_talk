@@ -33,7 +33,9 @@ jobs:
         env:
           NARAE_QA_ROOT: ${{ runner.temp }}/narae-talk-qa
         run: npm run test:talk:desktop
-      - name: Package complete source candidate
+      - name: Memo, calendar, notifications and group rooms
+        run: node tests/talk-personal-desktop.cjs
+      - name: Package source with memo, calendar and group rooms
         run: npm run package
       - name: Upload sanitized synthetic verification only
         if: always()
