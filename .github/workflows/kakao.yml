@@ -1,0 +1,43 @@
+name: NaraeTalk and document Office checks
+on:
+  push:
+    branches: [main, 'feat/kakao-pc-link']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Prepare isolated test dependencies
+        shell: pwsh
+        run: |
+          npm ci
+          python -m pip install -r requirements.txt
+          "NARAE_OFFICE_PYTHON=$((Get-Command python).Source)" >> $env:GITHUB_ENV
+      - name: Unit and security regression
+        run: npm test
+      - name: Offline and public user guide consistency
+        run: npm run guide:check
+      - name: Profile, regional CLI friends, chat, settings and document-only Office
+        env:
+          NARAE_QA_ROOT: ${{ runner.temp }}/narae-talk-qa
+        run: npm run test:talk:desktop
+      - name: Package complete source candidate
+        run: npm run package
+      - name: Upload sanitized synthetic verification only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: narae-talk-office-verification
+          path: ${{ runner.temp }}/narae-talk-qa/**
+          if-no-files-found: warn
