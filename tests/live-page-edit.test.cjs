@@ -1,0 +1,18 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),{pageFields,compilePageEdit}=require('../src/live-page-edit.cjs'),{runAgent}=require('../src/agent.cjs');
+const paragraphs=['수업안 양식 제목','(2)학년 (국어)과 교수·학습과정안','가상초등학교 ','1','주제설정','과목','국어','주제(단원)','인물의 마음 짐작하기','영역','문학, 듣기·말하기','단원목표','인물의 마음과 까닭을 표현한다.','핵심 아이디어','말과 표정을 단서로 마음을 짐작한다.','그림과 감정 카드로 표현을 돕는다.','2','다음 쪽의 목표설정'];
+const prompt='1쪽 내용 수정해봐 3학년 수학의 세 자리 수의 크기 비교 내용으로',file='D:/synthetic/lesson.hwp',fields=pageFields(paragraphs,prompt),plan={path:file,page:1,liveRevision:'before',fields};
+const replacements={topic:'세 자리 수의 크기 비교하기',area:'수와 연산',goal:'자릿값을 이해하고 세 자리 수의 크기를 비교한다.',idea:'수 모형을 조작하고 자릿값을 살펴 수의 크기를 비교한다. 학생이 자신의 비교 방법을 설명하고 친구의 생각을 듣는다.'},changes=()=>Object.fromEntries(fields.map(field=>[field.id,field.fixed??replacements[field.kind]]));
+test('lesson page fields preserve labels and school names and bind the requested grade and subject',()=>{
+ assert.equal(fields.length,7);assert.equal(fields.find(field=>field.kind==='title').fixed,'(3)학년 (수학)과 교수·학습과정안');assert.equal(fields.find(field=>field.kind==='subject').fixed,'수학');assert(!fields.some(field=>field.text.includes('가상초등학교')||field.text.includes('다음 쪽')));assert.equal(compilePageEdit({...plan,changes:changes()},plan).operations.length,7);assert.throws(()=>compilePageEdit({...plan,changes:{...changes(),goal_1:'인물의 마음과 까닭을 표현한다.'}},plan),/제목만 바꾸지/);assert.throws(()=>compilePageEdit({...plan,changes:{...changes(),goal_1:'한 문단\n다른 문단'}},plan),/한 문단/);
+});
+test('an unspecified third-grade math unit uses a concrete arithmetic starter and records that choice',()=>{
+ const fields=pageFields(paragraphs,'1쪽 내용 수정해봐 3학년 수학 내용으로');assert(fields.every(field=>field.fixed));assert.equal(fields.find(field=>field.kind==='topic').assumedTopic,'세 자리 수의 덧셈과 뺄셈');assert.match(fields.find(field=>field.kind==='goal').fixed,/수 모형.*덧셈과 뺄셈.*설명할 수 있다/);assert(fields.filter(field=>field.kind==='idea').every(field=>field.fixed.length>60));
+});
+test('actual agent compiles every page field before mutation and keeps full readback text out of model input',async()=>{
+ let text=paragraphs.join('\n')+'\n'+'READBACK_CANARY_'.repeat(2200),revision='before',drafts=0;const executions=[],requests=[];
+ const result=await runAgent({prompt,context:file,documentContext:{path:file,live:true},settings:{provider:'local',workspace:'D:/synthetic'},signal:new AbortController().signal,send:()=>{},request:async body=>{
+  requests.push(body);assert(!JSON.stringify(body.input).includes('READBACK_CANARY_'));assert.equal(body.documentProse,true);assert.deepEqual(body.tools,[]);drafts++;const current=fields.filter(field=>field.fixed===undefined)[Math.max(0,drafts-2)],value=drafts===1?current.text:changes()[current.id];return {output:[{type:'message',role:'assistant',content:[{type:'output_text',text:value}]}]};
+ },execute:async(name,args)=>{executions.push(name);if(name==='read_live_document')return {text,liveRevision:revision,page:1,pageText:paragraphs.join('\n'),pageParagraphs:paragraphs};assert.equal(name,'edit_live_document');assert.equal(args.operations.length,7);for(const op of args.operations.toReversed())text=text.split('\n').map(line=>line===op.text?op.replacement:line).join('\n');revision='after';return {verified:true,completed:7,liveRevision:revision,saved:true,appliedOperations:args.operations.toReversed()};}});
+ assert.equal(drafts,6);assert.deepEqual(executions,['read_live_document','edit_live_document','read_live_document']);assert.match(result,/1쪽.*다시 읽어 확인/);assert(text.includes('3)학년 (수학)'));assert(text.includes('세 자리 수의 크기 비교하기'));assert(!text.includes('인물의 마음과 까닭을 표현한다.'));
+});

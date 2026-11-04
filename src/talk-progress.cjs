@@ -1,6 +1,6 @@
 'use strict';
 const actions={open:'사이트 여는 중',read:'웹 본문 읽는 중',snapshot:'화면 확인 중',click:'화면에서 항목 여는 중',fill:'검색어·내용 입력 중',wait:'화면이 준비되기를 기다리는 중',search:'검색 중'};
-function toolLabel(name,args={}){if(name==='gyomu_browser')return actions[args.action]||'브라우저 작업 중';if(/^report_/.test(name))return '읽은 자료의 근거 정리 중';if(/read_image/.test(name))return '첨부 이미지 확인 중';if(/read_document|read_live_document/.test(name))return '문서 읽는 중';if(/create_document|edit_|export_pdf/.test(name))return '문서 작업 중';if(/cbe|messenger|kakao/.test(name))return '메신저 작업 중';if(/portal|neis|edufine|wxs/.test(name))return '업무포털 작업 중';if(/addon/.test(name))return '친구 사용 안내 확인 중';return '연결된 도구 실행 중';}
+function toolLabel(name,args={}){if(name==='gyomu_browser')return actions[args.action]||'브라우저 작업 중';if(name==='plan_live_page_edit')return '수업안의 새 내용 작성 중';if(/^report_/.test(name))return '읽은 자료의 근거 정리 중';if(/read_image/.test(name))return '첨부 이미지 확인 중';if(/read_document|read_live_document/.test(name))return '문서 읽는 중';if(/create_document|edit_|export_pdf/.test(name))return '문서 작업 중';if(/cbe|messenger|kakao/.test(name))return '메신저 작업 중';if(/portal|neis|edufine|wxs/.test(name))return '업무포털 작업 중';if(/addon/.test(name))return '친구 사용 안내 확인 중';return '연결된 도구 실행 중';}
 class TalkProgress{
  constructor(){this.current=null;}
  start(friend){this.current={friend,started:Date.now(),label:'요청을 확인하고 있습니다',steps:[],plan:null};return this.snapshot(friend);}
