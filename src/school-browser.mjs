@@ -119,7 +119,7 @@ export class OfficeSchoolBrowser extends SchoolBrowser {
   this.sessionPages||=new Map();try{const u=new URL(this.page.url());if(u.protocol==='https:'&&Object.hasOwn(session.HOSTS,u.hostname))this.sessionPages.set(u.hostname,this.page);}catch{}
   const version='s'+ ++this.serial;this.refs.clear();
   const result=await this.scope().evaluate(({version,limit,chars,offset,filter,selector})=>{
-   const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!e.closest('[aria-hidden=true],[inert]');};
+   const visible=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&!e.closest('[aria-hidden=true],[inert]')&&(!e.checkVisibility||e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}));};
    const dialogs=[...document.querySelectorAll('dialog[open],[role=dialog],[aria-modal=true],.modal-hidden')].filter(e=>visible(e)||e.matches('.modal-hidden')&&[...e.querySelectorAll('.modal-bg,button,a,[role=button]')].some(visible)),dialog=dialogs.at(-1),calendar=[...document.querySelectorAll('.cl-calendar.cl-popup')].filter(visible).at(-1),root=calendar||dialog||document.body;
    if(!root)return {url:location.href,title:document.title,loading:true,text:'화면 전환 중',elements:[],frames:[],tables:[],dialog:null};
    const labelled=e=>(e.getAttribute('aria-labelledby')||'').split(/\s+/).map(id=>document.getElementById(id)?.innerText||'').join(' ').trim();
@@ -164,7 +164,7 @@ export class OfficeSchoolBrowser extends SchoolBrowser {
   if(command.action==='frame'){const target=this.page.frames()[command.index];if(target&&/websocket|webReport|내용없음/i.test(target.name()))throw new Fault('UTILITY_FRAME','웹소켓·리포트 보조 프레임입니다. 업무 메뉴가 있는 최상위 frame 0을 사용하세요.');}
   if(command.action==='click'&&this.ref(command.ref).entry.nexacroMenu&&command.method===undefined)command={...command,method:'dom'};
   const calendarBefore=command.action==='click'&&this.lastObservation?.dialog==='달력'?await this.scope().evaluate(calendarChanged):undefined;
-  const origin=this.page,popup=command.action==='click'?this.context.waitForEvent('page',{timeout:1500}).catch(()=>null):null;let clickedLabel,queryNavigation;const commitDate=command.action==='fill'&&/등록일자|신청일자|시작일자|종료일자/.test(this.ref(command.ref).entry.label);
+  const origin=this.page,popup=command.action==='click'?this.context.waitForEvent('page',{timeout:1500}).catch(()=>null):null;let clickedLabel,queryNavigation,closingNotice;const commitDate=command.action==='fill'&&/등록일자|신청일자|시작일자|종료일자/.test(this.ref(command.ref).entry.label);
   if(command.action==='click'){
    const {entry,locator}=this.ref(command.ref),label=entry.label.replace(/\s+/g,'');
    const launchHandler=await locator.getAttribute('onclick')||'';
@@ -182,6 +182,7 @@ export class OfficeSchoolBrowser extends SchoolBrowser {
     }
    }
    clickedLabel=label;
+   if(/^(?:닫기|창닫기|공지사항닫기)$/.test(label)&&/공지사항|전달사항/.test(this.lastObservation?.dialog||''))closingNotice=await locator.elementHandle();
    if(/^(조회|검색)$/.test(label))queryNavigation=this.scope().waitForNavigation({waitUntil:'domcontentloaded',timeout:5000}).catch(()=>null);
    if(!finalOperation(entry.label)){this.clickAttempts||=new Map();const signature=this.clickIdentity(entry,label),attempts=this.clickAttempts.get(signature)||0;if(attempts>=3)throw new Fault('REPEATED_UI_ACTION','같은 화면·입력값에서 같은 버튼을 반복해 중지했습니다. 현재 탭을 유지하고 작업을 확인하세요.');this.clickAttempts.set(signature,attempts+1);}
    if(label==='K-에듀파인'){this.launchAttempts||=new Set();const key=origin.url()+'\n'+label;if(this.launchAttempts.has(key))throw new Fault('REPEATED_SERVICE_LAUNCH','같은 요청에서 에듀파인 열기를 이미 시도했습니다. 열린 탭을 확인하고 메뉴를 다시 누르지 마세요.');this.launchAttempts.add(key);}
@@ -200,6 +201,8 @@ export class OfficeSchoolBrowser extends SchoolBrowser {
   }else if(command.action==='click'&&/^(?:삭제|삭제\s*\/\s*연계반송)$/.test(this.ref(command.ref).entry.label))result=await this.deleteRecalledClick(command,this.ref(command.ref).entry);
   else result=await super.execute(command);
   if(result?.actionPending&&result.nativeDialog)return result;
+  if(closingNotice){try{await closingNotice.waitForElementState('hidden',{timeout:4000});}catch(error){if(error.name!=='TimeoutError'&&!/not attached|detached/i.test(error.message))throw error;}finally{await closingNotice.dispose();}}
+  if(command.action==='inspect'){const interaction=await this.ref(command.ref).locator.evaluate(e=>{const style=getComputedStyle(e),r=e.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {className:String(e.className||'').slice(0,200),role:e.getAttribute('role'),expanded:e.getAttribute('aria-expanded'),visibility:style.visibility,opacity:style.opacity,hitSelf:hit===e||Boolean(hit&&e.contains(hit)),ancestors:(()=>{const result=[];for(let p=e.parentElement;p&&result.length<4;p=p.parentElement){const s=getComputedStyle(p),r=p.getBoundingClientRect();result.push({tag:p.tagName.toLowerCase(),className:String(p.className||'').slice(0,160),role:p.getAttribute('role'),visibility:s.visibility,opacity:s.opacity,overflow:s.overflow,width:Math.round(r.width),height:Math.round(r.height)});}return result;})()};});return {...result,interaction};}
   if(calendarBefore!==undefined)await this.scope().waitForFunction(calendarChanged,calendarBefore,{timeout:7000,polling:50}).catch(error=>{if(error.name!=='TimeoutError')throw error;throw new Fault('CALENDAR_UPDATE_NOT_OBSERVED','달력 변경을 확인하지 못했습니다. 같은 버튼을 다시 누르지 말고 현재 화면을 새로 관찰하세요.');});
   if(queryNavigation){await queryNavigation;return {...await this.snapshot(command),...(result.finalAction?{finalAction:result.finalAction}:{})};}
   if(commitDate)await this.page.keyboard.press('Tab');
