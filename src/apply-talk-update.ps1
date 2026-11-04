@@ -49,6 +49,6 @@ try {
 } catch {Write-State 'failed' $_.Exception.Message;'failed: '+$_.Exception.Message | Set-Content -LiteralPath (Join-Path $stage 'result.txt');Write-Output $_.Exception.Message} finally {
     Stop-Transcript | Out-Null
     if((Test-Path -LiteralPath $runtime) -and -not (Test-Path -LiteralPath (Join-Path $stage 'cancelled.txt'))){
-        try {$env:NARAE_TALK_HOME=$jobData.home;$restarted=Start-Process -FilePath $runtime -ArgumentList @(('"'+$appRoot+'"'),'--talk') -WorkingDirectory $appRoot -WindowStyle Hidden -PassThru;if((Get-Content -LiteralPath (Join-Path $stage 'result.txt') -Raw).Trim() -eq 'complete'){Write-State 'restarted' ('pid='+$restarted.Id)}}catch{Write-State 'failed' ('Restart failed: '+$_.Exception.Message)}
+        try {$env:NARAE_TALK_HOME=$jobData.home;$restarted=Start-Process -FilePath $runtime -ArgumentList @(('"'+$appRoot+'"'),'--talk','--updated') -WorkingDirectory $appRoot -WindowStyle Hidden -PassThru;if((Get-Content -LiteralPath (Join-Path $stage 'result.txt') -Raw).Trim() -eq 'complete'){Write-State 'restarted' ('pid='+$restarted.Id)}}catch{Write-State 'failed' ('Restart failed: '+$_.Exception.Message)}
     }
 }
