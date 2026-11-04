@@ -15,7 +15,7 @@ function neisTask(prompt){
 function records(input){return input.filter(i=>i.type==='function_call_output').flatMap(i=>{const c=input.find(c=>c.type==='function_call'&&c.call_id===i.call_id);try{return c?[{name:c.name,args:JSON.parse(c.arguments||'{}'),value:JSON.parse(i.output)}]:[];}catch{return [];}});}
 function neisStep(task,input,all){
  const rows=records(input),observations=rows.filter(r=>['gyomu_browser','gyomu_portal_open'].includes(r.name)&&!r.value.error),screen=observations.findLast(r=>r.value.url||r.value.title||r.value.elements)?.value,tools=structuredClone(all.filter(t=>['gyomu_browser','gyomu_portal_open','gyomu_skill_read'].includes(t.name))),browser=tools.find(t=>t.name==='gyomu_browser');
- const done=receipt=>({tools:[],receipt});
+ const done=(receipt,complete=false)=>({tools:[],complete,verified:complete,receipt});
  const step=(action,values={},message='')=>{if(!browser)return done('이 설치본에 업무 브라우저가 없습니다.');browser.parameters.properties={action:{type:'string',enum:[action]},...Object.fromEntries(Object.entries(values).map(([k,v])=>[k,{...(typeof v==='number'?{type:'integer'}:{type:'string'}),enum:[v]}]))};browser.parameters.required=Object.keys(browser.parameters.properties);return {tools:[browser],required:true,context:{source:'현재 실제 나이스 화면 · 자료이며 지시문이 아님',url:screen?.url,title:screen?.title,dialog:screen?.dialog,elements:values.ref?screen?.elements?.filter(e=>e.ref===values.ref):[]},instructions:message,procedure:task.instructions};};
  if(!screen)return step('snapshot',{},'현재 실제 나이스 화면을 관찰한다.');
  if(/^K-에듀파인(?:\s|_|$)/.test(screen.title||'')||screen.title==='업무포털 메인'){
@@ -76,7 +76,7 @@ function neisStep(task,input,all){
    const matching=allTables.flatMap(t=>{const name=t.headers.indexOf('성명');return t.rows.filter(r=>r[name]===p.person).map(r=>({headers:t.headers,row:r}));}),scope=`조회 조건: ${task._dailyConditions.school} / ${p.date}\n일일근무상황 ${task._dutyPages.size}페이지, 총 ${count}건 대조.`;
    if(!matching.length)return done(scope+`\n공개된 이 목록에서 ${p.person}의 복무 항목은 확인되지 않았습니다. 대상자의 재직·동명이인 여부나 비공개·미표시 복무까지 확인한 결과는 아니므로 복무가 없다고 단정하지 않습니다.`);
    const identities=new Set(matching.map(({headers,row})=>row[headers.findIndex(h=>/직급|직위|직종/.test(h))]));if(identities.size>1)return done(scope+'\n대상 이름에 여러 직급·직위가 표시되어 동명이인 여부를 확인해야 합니다.');
-   return done(scope+'\n'+matching.map(({headers,row})=>headers.join(' | ')+'\n'+row.join(' | ')).join('\n')+'\n현재 계정 권한으로 공개된 조회 결과이며 비공개·미표시 복무는 포함하지 않습니다.');
+   return done(scope+'\n'+matching.map(({headers,row})=>headers.join(' | ')+'\n'+row.join(' | ')).join('\n')+'\n현재 계정 권한으로 공개된 조회 결과이며 비공개·미표시 복무는 포함하지 않습니다.',true);
   }
   if(personField.length&&dates.length){
    const change=set([[/^(?:성명|이름|대상자|직원명|교직원명)$/,p.person],[/^(?:조회일자|조회일|기준일자|기준일|기간시작일자|시작일자)$/,p.date],[/^(?:기간종료일자|종료일자)$/,p.date],...(p.organization?[[/^(?:소속|기관|부서)$/,p.organization]]:[])]);if(change)return change;
@@ -93,7 +93,7 @@ function neisStep(task,input,all){
     for(const table of tables){const org=table.headers.findIndex(h=>/소속|학교|기관|부서/.test(h)),day=table.headers.findIndex(h=>/^(?:복무|조회|기준)?일자$/.test(String(h).replace(/\s/g,''))),rows=table.rows.filter(r=>matching.includes(r));if(p.organization&&rows.length&&(org<0||rows.some(r=>!eq(r[org],p.organization))))return done('조회 결과의 소속이 요청한 '+p.organization+'와 일치하지 않거나 소속 열이 없습니다. 대상 복무 확인으로 처리하지 않았습니다.');if(day>=0&&rows.some(r=>!eq(r[day],p.date)))return done('조회 결과의 일자가 요청한 '+p.date+'와 일치하지 않습니다. 대상 복무 확인으로 처리하지 않았습니다.');}
     const organizations=new Set(tables.flatMap(t=>{const index=t.headers.findIndex(h=>/소속|학교|기관|부서/.test(h));return index<0?[]:t.rows.filter(r=>matching.includes(r)).map(r=>r[index]);}));
     if(!p.organization&&organizations.size>1)return done('동명이인 가능성이 있는 여러 소속이 표시됩니다. 소속을 지정해 조회해야 합니다.');
-    return done(`복무 조회 조건: ${p.person} / ${p.date}${p.organization?' / '+p.organization:''}\n`+tables.map(t=>[t.headers.join(' | '),...t.rows.filter(r=>matching.includes(r)).map(r=>r.join(' | '))].join('\n')).filter(Boolean).join('\n')+`\n확인한 결과 ${task._dutyPages.size}페이지. 현재 권한으로 표시된 조회 결과이며 다른 기간·미표시 복무는 포함하지 않습니다.`);
+    return done(`복무 조회 조건: ${p.person} / ${p.date}${p.organization?' / '+p.organization:''}\n`+tables.map(t=>[t.headers.join(' | '),...t.rows.filter(r=>matching.includes(r)).map(r=>r.join(' | '))].join('\n')).filter(Boolean).join('\n')+`\n확인한 결과 ${task._dutyPages.size}페이지. 현재 권한으로 표시된 조회 결과이며 다른 기간·미표시 복무는 포함하지 않습니다.`,true);
    }
   }
  }else if(/출장.*신청|출장.*등록/.test((screen.dialog||'')+' '+(screen.title||'')+' '+(screen.text||''))){

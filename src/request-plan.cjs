@@ -1,7 +1,7 @@
 'use strict';
 const {randomUUID}=require('node:crypto');
 const MAX_TASKS=12;
-const action=/(?:들어가|접속|열어|방문|이동|띄워|검색|찾아|찾고|읽|봐|보여|확인|요약|정리|비교|만들|작성|수정|편집|바꾸|바꿔|변경|서식|저장|출력|변환|보내|전송|등록|삭제|신청|상신|결재|다운로드|실행|계산|설명|알려)/i;
+const action=/(?:들어가|접속|열어|방문|이동|띄워|조회|검색|찾아|찾고|읽|봐|보여|확인|요약|정리|비교|만들|작성|수정|편집|바꾸|바꿔|변경|서식|저장|출력|변환|보내|전송|등록|삭제|신청|상신|결재|다운로드|실행|계산|설명|알려)/i;
 const incomplete=/미완료|미확인|확인하지 못|확인할 수 없|완료로 처리하지|완료하지 못|시작하지 못|찾지 못|읽지 못|이동하지 못|실행하지 못|실패|로그인 대기|승인 대기|직접 로그인이 필요|열린 웹 페이지가 없습니다|일부만/;
 // Mask quoted payloads, URLs and brackets before finding task boundaries. Their
 // text remains byte-for-byte intact in the instructions we actually execute.
@@ -39,6 +39,9 @@ function expectedMutation(prompt){return /(?:만들|작성|생성|수정|편집|
 function mutationTool(name,args={}){return /^(?:create_|edit_|export_)/.test(name)||/^(?:send|add|apply|save|delete|submit|confirm|export|download|run|replace|edit|create)/.test(args.operation||args.action||'');}
 function blockedResult(text,evidence,outcome,prompt=''){
  if(outcome?.complete===false)return outcome.reason||'현재 단계의 완료를 확인하지 못했습니다.';
+ // A verified receipt is set by a domain executor after its own readback or
+ // server-row comparison, never by the model's completion claim.
+ if(outcome?.complete===true&&outcome.verified===true&&evidence.length)return null;
  const latest=new Map();for(const e of evidence)latest.set(e.name+':'+(e.args.action||e.args.operation||''),e);
  if([...latest.values()].some(e=>e.value?.error||e.value?.success===false||e.value?.ok===false||e.value?.pending===true||e.value?.complete===false))return '도구 오류 또는 확인 대기가 남아 있습니다.';
  if(expectedMutation(prompt)){
@@ -57,17 +60,18 @@ function planText(plan,results){
  return '작업 목록\n'+plan.tasks.map((t,i)=>`${i+1}. ${marks[t.status]} ${t.title}${t.reason?' · '+t.reason:''}`).join('\n')+'\n\n'+results.map((r,i)=>`${i+1}. ${plan.tasks[i].title}\n${plan.tasks[i].status==='blocked'?'완료 미확인: '+plan.tasks[i].reason+'\n확인할 단계 결과:\n':''}${r}`).join('\n\n');
 }
 async function runPlan(options,runSingle){
- const parts=splitRequest(options.prompt,options);if(parts.length<2)return runSingle(options);
+ const parts=splitRequest(options.prompt,options),multiple=parts.length>1;
+ if(!parts.length||!multiple&&(!action.test(maskPayload(options.prompt))||/사용법|방법.*설명|절차.*설명|기능.*(?:개발|보완)|가능(?:해|하|한)|할 수 있/.test(maskPayload(options.prompt))))return runSingle(options);
  const plan={id:randomUUID(),tasks:parts.map((prompt,i)=>({id:'task-'+(i+1),title:prompt.slice(0,240),status:'pending'}))},results=[],history=[...(options.history||[])];
  let context=options.context,documentContext=options.documentContext;
- const publish=()=>options.send({type:'taskPlan',plan:structuredClone(plan)});publish();
+ const publish=()=>options.send({type:'taskPlan',plan:structuredClone(plan)}),checklists=plan.tasks.map((task,i)=>require('./task-checklist.cjs').checklist(task,parts[i],publish));publish();
  for(let i=0;i<parts.length;i++){
-  const task=plan.tasks[i],evidence=[];let outcome;
+  const task=plan.tasks[i],evidence=[];let outcome;const checks=checklists[i];
   try{
    options.signal.throwIfAborted();task.status='in_progress';publish();
-   const text=await runSingle({...options,context,documentContext,prompt:parts[i],history,planContext:results.map((result,n)=>({task:parts[n],result:result.slice(0,2000)})).slice(-6),agentInstructions:(options.agentInstructions||'')+'\n원래 사용자 요청 전체(금지·범위·수신자·파일 조건을 모두 유지):\n'+options.prompt+'\n현재 작업 '+(i+1)+'/'+parts.length+'만 수행하고 나머지는 실행기가 순서대로 처리합니다. 이전 작업의 결과는 대화 기록에서 확인하세요.',onOutcome:value=>{outcome=value;},send:event=>{if(event.type!=='text')options.send(event);},execute:async(name,args,signal)=>{try{const value=await options.execute(name,args,signal);evidence.push({name,args,value});return value;}catch(error){evidence.push({name,args,value:{error:error.message}});throw error;}}});
+   const text=await runSingle({...options,context,documentContext,prompt:parts[i],history,planContext:results.map((result,n)=>({task:parts[n],result:result.slice(0,2000)})).slice(-6),agentInstructions:(options.agentInstructions||'')+(multiple?'\n원래 사용자 요청 전체(금지·범위·수신자·파일 조건을 모두 유지):\n'+options.prompt+'\n현재 작업 '+(i+1)+'/'+parts.length+'만 수행하고 나머지는 실행기가 순서대로 처리합니다. 이전 작업의 결과는 대화 기록에서 확인하세요.':''),onOutcome:value=>{outcome=value;options.onOutcome?.(value);},send:event=>{if(!multiple||event.type!=='text')options.send(event);},execute:(name,args,signal,observed)=>checks.execute(name,args,signal,async()=>{try{const value=await options.execute(name,args,signal);evidence.push({name,args,value});return value;}catch(error){evidence.push({name,args,value:{error:error.message}});throw error;}},observed)});
    options.signal.throwIfAborted();results.push(text);
-   const reason=blockedResult(text,evidence,outcome,parts[i]);task.status=reason?'blocked':'completed';if(reason)task.reason=String(reason).slice(0,400);publish();
+   checks.startCheck();const reason=blockedResult(text,evidence,outcome,parts[i]);task.status=reason?'blocked':'completed';if(reason)task.reason=String(reason).slice(0,400);checks.finish(reason);
    if(reason)break;
    // Carry only verified tool observations into dependent document tasks. A
    // newly created file replaces the old context; a live edit carries its
@@ -76,8 +80,9 @@ async function runPlan(options,runSingle){
    if(created){context=created.value.path;if(documentContext||options.toolDomain==='hangul')documentContext={path:context,live:false};}
    else if(documentContext?.live){const read=evidence.findLast(e=>e.name==='read_live_document'&&!e.value?.error&&e.args.path===documentContext.path);if(read)documentContext={...documentContext,selection:read.value.selection||null};}
    history.push({role:'user',content:parts[i]},{role:'assistant',content:text});
-  }catch(error){task.status=options.signal.aborted?'cancelled':'blocked';task.reason=options.signal.aborted?'사용자가 작업을 중지했습니다.':String(error.message).slice(0,400);publish();error.taskPlan=structuredClone(plan);throw error;}
+  }catch(error){task.status=options.signal.aborted?'cancelled':'blocked';task.reason=options.signal.aborted?'사용자가 작업을 중지했습니다.':String(error.message).slice(0,400);checks.stop(task.reason,options.signal.aborted);error.taskPlan=structuredClone(plan);throw error;}
  }
+ if(!multiple){const text=results[0];if(plan.tasks[0].status==='blocked'&&!incomplete.test(text)){const note='\n\n완료 미확인: '+plan.tasks[0].reason;options.send({type:'text',text:note});return text+note;}return text;}
  const text=planText(plan,results);options.send({type:'text',text});return text;
 }
 module.exports={splitRequest,runPlan,blockedResult,MAX_TASKS};

@@ -34,7 +34,7 @@ function schoolFinalStep(task,input,all,prepare){
  if(uncertain&&expected){
   const listing=records.slice(lastAttempt+1).findLast(r=>r.call.name==='gyomu_browser'&&!r.value.error&&r.value.tableData?.length),matches=[];
   for(const table of listing?.value.tableData||[]){if(table.hasMore)continue;const title=table.headers.findIndex(h=>/^(?:문서)?제목$/.test(String(h).replace(/\s/g,''))),progress=table.headers.findIndex(h=>String(h).replace(/\s/g,'')==='진행상태'),status=progress>=0?progress:table.headers.findIndex(h=>/^(?:결재|신청)?상태$/.test(String(h).replace(/\s/g,'')));if(title<0||status<0)continue;for(const row of table.rows||[]){const state=String(row[status]||'');if(String(row[title]).trim()===expected.trim()&&!/미상신|취소|회수|임시저장|반려/.test(state)&&(task.operation==='approve'?/결재완료|승인완료/.test(state):/결재중|상신|신청|진행중|검토중|기안완료|^진행\s*\(/.test(state)))matches.push({headers:table.headers,row});}}
-  if(matches.length===1)return {tools:[],receipt:(task.operation==='submit'?'상신 후':'결재 후')+' 같은 문서를 서버 목록에서 다시 확인했습니다.\n'+matches[0].headers.join(' | ')+'\n'+matches[0].row.join(' | ')+'\n같은 최종 처리를 반복하지 않았습니다.'};
+  if(matches.length===1)return {tools:[],complete:true,verified:true,receipt:(task.operation==='submit'?'상신 후':'결재 후')+' 같은 문서를 서버 목록에서 다시 확인했습니다.\n'+matches[0].headers.join(' | ')+'\n'+matches[0].row.join(' | ')+'\n같은 최종 처리를 반복하지 않았습니다.'};
  }
  if(uncertain){
   for(const tool of tools){if(tool.name==='gyomu_browser'){tool.parameters.properties.action.enum=tool.parameters.properties.action.enum.filter(a=>!['fill','select','check','uncheck','press'].includes(a));}}
