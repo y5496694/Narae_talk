@@ -2,15 +2,14 @@
 const fields=e=>String(e.label||'').replace(/[\s()]/g,'').split(',')[0];
 const normalize=v=>String(v??'').replace(/[\s./:\-시분]/g,'');
 const eq=(a,b)=>normalize(a)===normalize(b);
-function neisTask(prompt){
+function neisTask(prompt,now=new Date()){
  if(!/나이스|NEIS|복무|출장/i.test(prompt)||/사용법|벤치|스킬|기능.*(?:개발|보완)/.test(prompt))return null;
  const candidate=prompt.match(/([가-힣]{2,4})\s*(?:선생님|교사)/)?.[1]||prompt.match(/(?:나이스|NEIS)\s+([가-힣]{2,4})(?=\s|의)/i)?.[1],person=/^(?:연가|조퇴|복무|출장|다른사람|다른|근무상황)$/.test(candidate||'')?undefined:candidate;
  const duty=/복무|근무상황/.test(prompt)&&(person||/다른\s*사람|타인|직원|교직원|대상\s*["“]|[가-힣]{2,4}(?:의|님)\s*복무/.test(prompt))&&/확인|조회|알려|설명/.test(prompt),trip=/출장/.test(prompt)&&/올려|신청|초안|상신|준비/.test(prompt);
  if(!duty&&!trip)return null;
- const dates=[...prompt.matchAll(/20\d{2}[-.]\d{1,2}[-.]\d{1,2}/g)].map(m=>m[0].split(/[-.]/).map((x,i)=>i?x.padStart(2,'0'):x).join('-'));
- const times=[...prompt.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)].map(m=>m[1].padStart(2,'0')+':'+m[2]);
+ const timing=require('./school-input.cjs').schoolInput(prompt,now);
  const literal=label=>prompt.match(new RegExp(label+'(?:는|은|[:：])?\\s*["“]([^"”]+)["”]'))?.[1];
- return {area:duty?'neis-duty':'neis-trip',observe:true,mixed:false,draft:trip,plan:{date:dates[0],endDate:dates[1]||dates[0],start:times[0],end:times[1],person:literal('대상')||person||prompt.match(/([가-힣]{2,4})(?:의|님)\s*복무/)?.[1],organization:literal('소속'),destination:literal('출장지'),purpose:literal('(?:출장목적|목적|용무)'),transport:literal('교통수단'),cost:literal('여비'),type:literal('출장구분')},submit:trip&&/상신|올려|신청해/.test(prompt)&&!/상신.*(?:하지|금지)|미상신|초안/.test(prompt),instructions:'현재 계정에 표시된 권한과 실제 메뉴·필드만 사용한다. 관찰하지 않은 주소·ref·사람·여비·결재선을 만들지 않는다. 타인 복무는 현재 권한으로 열리는 조회만 한다. 출장 준비는 실제 출장 신청 화면에서 하며 최종 상신은 문서·결재선·확인창을 대조한 전용 절차를 따른다.'};
+ return {area:duty?'neis-duty':'neis-trip',observe:true,mixed:false,draft:trip,plan:{date:timing.date,endDate:timing.endDate,start:timing.start,end:timing.end,person:literal('대상')||person||prompt.match(/([가-힣]{2,4})(?:의|님)\s*복무/)?.[1],organization:literal('소속'),destination:literal('출장지'),purpose:literal('(?:출장목적|목적|용무)'),transport:literal('교통수단'),cost:literal('여비'),type:literal('출장구분')},submit:trip&&/상신|올려|신청해/.test(prompt)&&!/상신.*(?:하지|금지)|미상신|초안/.test(prompt),instructions:'현재 계정에 표시된 권한과 실제 메뉴·필드만 사용한다. 관찰하지 않은 주소·ref·사람·여비·결재선을 만들지 않는다. 타인 복무는 현재 권한으로 열리는 조회만 한다. 출장 준비는 실제 출장 신청 화면에서 하며 최종 상신은 문서·결재선·확인창을 대조한 전용 절차를 따른다.'};
 }
 function records(input){return input.filter(i=>i.type==='function_call_output').flatMap(i=>{const c=input.find(c=>c.type==='function_call'&&c.call_id===i.call_id);try{return c?[{name:c.name,args:JSON.parse(c.arguments||'{}'),value:JSON.parse(i.output)}]:[];}catch{return [];}});}
 function neisStep(task,input,all){

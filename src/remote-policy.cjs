@@ -25,11 +25,11 @@ class RemotePolicy{
  status(){return this.pending?.view||null;}
  decide({id,digest,allow}){const p=this.pending;if(!p||p.view.id!==id||p.view.digest!==digest||Date.now()>=p.view.expires)throw new Error('승인 요청이 만료됐거나 다른 작업입니다.');p.finish(allow===true);return {decided:true};}
  applyAutoAllow(){const p=this.pending;if(!p||this.autoAllow()!==true)return false;p.finish(Date.now()<p.view.expires);return true;}
- async approve(name,args,signal){
+ async approve(name,args,signal,summary){
   if(signal?.aborted)throw new Error('작업을 중단했습니다.');if(this.pending)throw new Error('앞선 변경 승인을 기다리고 있습니다.');
   if(this.autoAllow()===true)return;
-  const copy=structuredClone(args);
-  await new Promise((resolve,reject)=>{const view={id:randomBytes(16).toString('hex'),name,args:copy,digest:createHash('sha256').update(JSON.stringify({name,args:copy})).digest('hex'),expires:Date.now()+this.timeout};let timer,settled=false;const denied=()=>{const e=new Error('PC에서 이 변경을 승인하지 않았습니다.');e.code='LOCAL_APPROVAL_DENIED';return e;};const abort=()=>finish(false);const finish=allow=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);this.pending=null;this.notify(null);allow?resolve():reject(denied());};this.pending={view,finish};timer=setTimeout(()=>finish(false),this.timeout);timer.unref();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)finish(false);else this.notify(view);});
+  const copy=structuredClone(args),details=summary?Object.fromEntries(['target','title','origin'].filter(k=>typeof summary[k]==='string').map(k=>[k,summary[k].slice(0,300)])):undefined;
+  await new Promise((resolve,reject)=>{const view={id:randomBytes(16).toString('hex'),name,args:copy,...(details?{summary:details}:{}),digest:createHash('sha256').update(JSON.stringify({name,args:copy,summary:details})).digest('hex'),expires:Date.now()+this.timeout};let timer,settled=false;const denied=expired=>{const e=new Error(expired?'PC 도구 실행 승인 대기 시간이 만료됐습니다.':'PC에서 이 변경을 승인하지 않았습니다.');e.code=expired?'LOCAL_APPROVAL_TIMEOUT':'LOCAL_APPROVAL_DENIED';return e;};const abort=()=>finish(false);const finish=(allow,expired=false)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);this.pending=null;this.notify(null);allow?resolve():reject(denied(expired));};this.pending={view,finish};timer=setTimeout(()=>finish(false,true),this.timeout);timer.unref();signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)finish(false);else this.notify(view);});
   if(signal?.aborted)throw new Error('작업을 중단했습니다.');
  }
  async run(name,args,signal,execute,options={}){if(signal?.aborted)throw new Error('작업을 중단했습니다.');const copy=this.prepare(name,args,options);if(!READ.has(name))await this.approve(name,copy,signal);
