@@ -5,6 +5,7 @@ import {chromium} from 'playwright-core';
 import {randomUUID} from 'node:crypto';
 import session from './school-session.cjs';
 import regional from './school-region.cjs';
+function snapshotOptions(args){return {limit:bound(args.limit,1,100,50),chars:bound(args.chars,100,12000,1800),offset:bound(args.offset,0,10000,0)};}
 function calendarChanged(expected){
  const popup=[...document.querySelectorAll('.cl-calendar.cl-popup')].find(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';});
  const state=JSON.stringify(popup?{text:popup.innerText,labels:[...popup.querySelectorAll('[aria-label]')].map(e=>e.getAttribute('aria-label'))}:null);
@@ -113,6 +114,7 @@ export class OfficeSchoolBrowser extends SchoolBrowser {
   return {...result,sourceKind};
  }
  async snapshot(args={}){
+  const limits=snapshotOptions(args);
   this.watchNetwork();
   if(this.pendingDialog)return super.snapshot(args);
   if(this.attached&&(!this.page||this.page.isClosed()))return {attached:true,url:'about:blank',title:'기존 Chrome 연결됨',text:'현재 연결 작업 공간에 웹 탭이 없습니다. 요청한 웹 주소를 기존 Chrome 프로필에서 여세요.',elements:[],frames:[],tabs:[],untrusted:true};
@@ -126,22 +128,37 @@ export class OfficeSchoolBrowser extends SchoolBrowser {
    const formLabel=e=>{const label=e.labels?.[0];if(!label)return '';const copy=label.cloneNode(true);copy.querySelectorAll('input,select,textarea,button').forEach(child=>child.remove());return copy.textContent;};
    const name=e=>(e.getAttribute('aria-label')||(/^(button|submit)$/.test(e.type||'')?e.value:'')||labelled(e)||formLabel(e)||e.getAttribute('placeholder')||e.getAttribute('title')||e.innerText||e.getAttribute('name')||'').replace(/\s+/g,' ').trim().slice(0,180);
    const query=selector||'a[href],button,input:not([type=hidden]),textarea,select,[onclick],[role=button],[role=link],[role=combobox],[role=option],[role=gridcell],[role=treeitem],[role=menuitem],[role=tab],[role=checkbox],[role=radio],[contenteditable=true]';
-   const textMatches=[];if(filter){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);for(let node=walker.nextNode();node;node=walker.nextNode()){const e=node.parentElement;if(e&&!/^(SCRIPT|STYLE|NOSCRIPT)$/.test(e.tagName)&&(node.nodeValue||'').includes(filter)&&(e.innerText||'').trim().length<=180&&visible(e))textMatches.push(e);}}
+   const textMatches=[];if(filter){const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);for(let node=walker.nextNode();node;node=walker.nextNode()){const e=node.parentElement;if(e&&!/^(SCRIPT|STYLE|NOSCRIPT)$/.test(e.tagName)&&(node.nodeValue||'').includes(filter)&&(e.innerText||'').trim().length<=180&&visible(e))textMatches.push(e.closest('[role=menuitem]')||e);}}
    const nodes=[...new Set([...root.querySelectorAll(query),...textMatches,...(dialog&&!calendar?[...document.querySelectorAll('[role=listbox] [role=option]')].filter(visible):[])])].filter(e=>!textMatches.some(leaf=>leaf!==e&&e.contains(leaf)&&name(leaf)===name(e))),elements=[],targets=new Set();
    for(const e of nodes){if(!visible(e)&&!(['checkbox','radio'].includes(e.type)&&e.parentElement&&visible(e.parentElement)))continue;const cell=e.closest('td'),table=cell?.closest('table'),header=table?.querySelector('thead tr')?.cells[cell.cellIndex]||[...table?.querySelectorAll('tr')||[]].find(row=>row.querySelector('th'))?.cells[cell.cellIndex],documentTitle=Boolean(cell&&header?.innerText.replace(/\s|[▲▼▴▾↕]/g,'')==='제목'&&(e.innerText||'').trim().length>5);const label=documentTitle?(e.innerText||'').replace(/\s+/g,' ').trim().slice(0,500):name(e);if(filter&&!label.includes(filter))continue;const tag=e.tagName.toLowerCase(),type=e.getAttribute('type')||'',nexacroMenu=/\.gridMenu\.body\.gridrow_\d+\.cell_\d+_\d+\.celltreeitem\.treeitemtext(?::text)?$/.test(e.id||'')&&Boolean(e.closest('.treeitemtext')),role=nexacroMenu?'treeitem':e.getAttribute('role')||(label==='결재'&&e.closest('nav,[role=navigation]')&&!dialog?'menuitem':['checkbox','radio'].includes(type)?type:tag==='a'?'link':tag==='input'?'textbox':e.hasAttribute('onclick')?'button':tag),ref=`${version}/e${elements.length+1}`;
     let target=e;if(textMatches.includes(e)&&e.closest('.nexacontentsbox')){const r=e.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2),h=hit?.getBoundingClientRect();if(hit&&root.contains(hit)&&hit.matches('.nexainnercontainer')&&h.width<=Math.max(300,r.width*2)&&h.height<=Math.max(80,r.height*2))target=hit;}if(targets.has(target))continue;targets.add(target);
-    const sensitive=type==='password'||/password|one-time-code/.test(e.autocomplete||'');
-    target.setAttribute('data-narae-ref',ref);elements.push({ref,role,tag,type,label,id:e.id||'',disabled:Boolean(e.disabled)||e.getAttribute('aria-disabled')==='true',...(documentTitle?{documentTitle:true}:{}),...(target!==e?{pointerTarget:true}:{}),...(nexacroMenu?{nexacroMenu:true}:{}),...(tag==='a'?{href:e.href}:{}),...(['input','textarea','select'].includes(tag)?{value:sensitive?'[인증정보]':e.value}:{}),...(['combobox','option','tab','treeitem'].includes(role)?{expanded:e.getAttribute('aria-expanded'),selected:e.getAttribute('aria-selected'),display:e.innerText.slice(0,180)}:{}),...(tag==='input'&&/일자/.test(label)?{dateInput:{placeholder:e.getAttribute('placeholder'),maxLength:e.maxLength,inputMode:e.inputMode,className:e.className,container:e.parentElement?.className,parentContainer:e.parentElement?.parentElement?.className}}:{}),...(tag==='select'?{options:[...e.options].map(o=>({text:o.text,value:o.value,selected:o.selected}))}:{}),...(['checkbox','radio'].includes(type)?{checked:e.checked}:{})});
+    const sensitive=type==='password'||/password|one-time-code/.test(e.autocomplete||''),menuToggle=role==='menuitem'&&['true','false'].includes(e.getAttribute('aria-expanded'))&&[...e.querySelectorAll('.cl-expand-icon')].filter(visible).length===1;
+    target.setAttribute('data-narae-ref',ref);elements.push({ref,role,tag,type,label,id:e.id||'',disabled:Boolean(e.disabled)||e.getAttribute('aria-disabled')==='true',...(documentTitle?{documentTitle:true}:{}),...(target!==e?{pointerTarget:true}:{}),...(nexacroMenu?{nexacroMenu:true}:{}),...(menuToggle?{menuToggle:true}:{}),...(tag==='a'?{href:e.href}:{}),...(['input','textarea','select'].includes(tag)?{value:sensitive?'[인증정보]':e.value}:{}),...(['combobox','option','tab','treeitem','menuitem'].includes(role)?{expanded:e.getAttribute('aria-expanded'),selected:e.getAttribute('aria-selected'),display:e.innerText.slice(0,180)}:{}),...(tag==='input'&&/일자/.test(label)?{dateInput:{placeholder:e.getAttribute('placeholder'),maxLength:e.maxLength,inputMode:e.inputMode,className:e.className,container:e.parentElement?.className,parentContainer:e.parentElement?.parentElement?.className}}:{}),...(tag==='select'?{options:[...e.options].map(o=>({text:o.text,value:o.value,selected:o.selected}))}:{}),...(['checkbox','radio'].includes(type)?{checked:e.checked}:{})});
    }
    return {url:location.href,title:document.title,dialog:calendar?'달력':dialog?(name(dialog)||'대화상자'):null,text:(root?.innerText||'').slice(0,chars),tables:[...root.querySelectorAll('table,[role=grid]')].filter(visible).map(e=>e.innerText.slice(0,3000)).slice(0,5),elements:elements.slice(offset,offset+limit),totalElements:elements.length,appliedFilter:filter||null,hasMore:elements.length>offset+limit,nextOffset:offset+limit,calendars:[...document.querySelectorAll('[class*="calendar" i]')].filter(e=>visible(e)&&e.innerText.trim()).filter((e,_i,list)=>!list.some(parent=>parent!==e&&parent.contains(e))).map(e=>({className:e.className,text:e.innerText.slice(0,1000)})).slice(0,2),frames:[...document.querySelectorAll('iframe,frame')].map(e=>({name:e.name||e.title||'',url:e.src}))};
-  },{version,limit:bound(args.limit,1,100,50),chars:bound(args.chars,100,12000,1800),offset:bound(args.offset,0,10000,0),filter:args.filter||'',selector:args.selector||''});
+  },{version,...limits,filter:args.filter||'',selector:args.selector||''});
   if(result.loading)return {...result,version,untrusted:true};
   result.tableData=await this.scope().evaluate(()=>[...document.querySelectorAll('table,[role=grid]')].filter(t=>{const r=t.getBoundingClientRect();return r.width>0&&r.height>0;}).slice(0,5).map(t=>{const rows=[...t.querySelectorAll('tr,[role=row]')],header=rows.find(r=>r.querySelector('th,[role=columnheader]')),data=rows.filter(r=>r!==header).map(r=>[...r.querySelectorAll('td,[role=gridcell]')].map(c=>c.innerText.trim())).filter(r=>r.length);return {headers:header?[...header.querySelectorAll('th,[role=columnheader]')].map(c=>c.innerText.trim()):[],rows:data.slice(0,100),hasMore:data.length>100,totalVisibleRows:data.length};}));
   for(const entry of result.elements)this.refs.set(entry.ref,entry);
   result.documentRows=await this.scope().evaluate(documentRowsDOM);result.selectedDocuments=result.documentRows.filter(r=>r.selected).map(({text,documentIds})=>({text,documentIds}));const lifecycle=await this.lifecycleContext();if(lifecycle)result.lifecycleContext=lifecycle;
   this.lastObservation=result;return this.withFinalState({version,frameIndex:this.page.frames().indexOf(this.scope()),...result,untrusted:true});
  }
+ async menuToggle(command){
+  const {entry,locator}=this.ref(command.ref),state=await locator.getAttribute('aria-expanded');
+  if(await locator.getAttribute('role')!=='menuitem'||!['true','false'].includes(state)||entry.expanded!==state)throw new Fault('MENU_STATE_CHANGED','메뉴의 펼침 상태가 관찰 이후 달라졌습니다. 현재 화면을 다시 확인하세요.');
+  const wanted=command.action==='click'?String(state!=='true'):String(command.action==='expand');
+  if(state!==wanted){
+   const toggle=locator.locator('.cl-expand-icon:visible');if(await toggle.count()!==1||entry.disabled)throw new Fault('MENU_TOGGLE_REQUIRED','현재 메뉴의 보이는 펼침 아이콘 한 개가 확인되어야 합니다.');
+   this.clickAttempts||=new Map();const key=this.clickIdentity(entry,entry.label)+'\n'+wanted,attempts=this.clickAttempts.get(key)||0;if(attempts>=3)throw new Fault('REPEATED_UI_ACTION','같은 메뉴 펼침을 반복하지 마세요. 현재 화면을 확인하세요.');this.clickAttempts.set(key,attempts+1);
+   await toggle.click();
+   await this.scope().waitForFunction(({ref,wanted})=>document.querySelector('[data-narae-ref="'+ref+'"]')?.getAttribute('aria-expanded')===wanted,{ref:command.ref,wanted},{timeout:3000}).catch(error=>{if(error.name!=='TimeoutError')throw error;throw new Fault('MENU_UPDATE_NOT_OBSERVED','메뉴 펼침 결과를 확인하지 못했습니다. 같은 메뉴를 다시 누르지 말고 현재 화면을 관찰하세요.');});
+  }
+  this.invalidate();return this.snapshot(command);
+ }
  async execute(command){
+  // Validate result bounds before dispatch: a bad snapshot option must not
+  // turn a successful click into an apparent failure and invite a retry.
+  snapshotOptions(command);
   if(['requisition-observe','requisition-click','requisition-confirm','requisition-status'].includes(command.action))return super.execute(command);
   if(command.action==='dialog'){
    const prior=this.pendingUi,dialogPage=this.pendingDialog?.page;if(dialogPage&&dialogPage!==this.page){this.page=dialogPage;this.frame=null;this.invalidate();}const result=await this.executeObserved(command);if(prior){let timer;try{await Promise.race([prior,new Promise((_resolve,reject)=>{timer=setTimeout(()=>reject(new Fault('NAVIGATION_PENDING','안내를 닫은 뒤 원래 화면 전환이 끝나지 않았습니다. 같은 클릭을 반복하지 마세요.')),15000);})]);}finally{clearTimeout(timer);}if(this.pendingUi===prior)this.pendingUi=null;return this.snapshot(command);}return result;
@@ -162,6 +179,7 @@ export class OfficeSchoolBrowser extends SchoolBrowser {
   if(this.attached&&(!this.page||this.page.isClosed())&&['snapshot','read','frames'].includes(command.action))return this.snapshot(command);
   if(command.action==='open'&&regional.portalHost(new URL(command.url).hostname)){const requested=new URL(command.url).href,existing=this.context.pages().find(p=>!p.isClosed()&&p.url()===requested);if(existing){this.page=existing;this.frame=null;await existing.bringToFront();this.invalidate();return this.snapshot(command);}}
   if(command.action==='frame'){const target=this.page.frames()[command.index];if(target&&/websocket|webReport|내용없음/i.test(target.name()))throw new Fault('UTILITY_FRAME','웹소켓·리포트 보조 프레임입니다. 업무 메뉴가 있는 최상위 frame 0을 사용하세요.');}
+  if(['click','expand','collapse'].includes(command.action)&&this.ref(command.ref).entry.menuToggle)return this.menuToggle(command);
   if(command.action==='click'&&this.ref(command.ref).entry.nexacroMenu&&command.method===undefined)command={...command,method:'dom'};
   const calendarBefore=command.action==='click'&&this.lastObservation?.dialog==='달력'?await this.scope().evaluate(calendarChanged):undefined;
   const origin=this.page,popup=command.action==='click'?this.context.waitForEvent('page',{timeout:1500}).catch(()=>null):null;let clickedLabel,queryNavigation,closingNotice;const commitDate=command.action==='fill'&&/등록일자|신청일자|시작일자|종료일자/.test(this.ref(command.ref).entry.label);
