@@ -1,12 +1,13 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path');
 const {same}=require('./hangul-workspace.cjs');
-function hangulMethods({documents,preview,native,assertSender,chooseFile,canSelect,execute,output,idle,setPane}){
+function hangulMethods({documents,preview,native,assertSender,chooseFile,canSelect,execute,output,idle,setPane,copyText}){
  const current=()=>{const file=documents.state().document?.path;if(!file)throw Error('먼저 한글 문서를 열거나 선택하세요.');return file;};
  const guard=fn=>async(args,event)=>{assertSender(event);return fn(args||{},event);};
  return {
   hangulPane:guard(({expanded},event)=>{if(typeof expanded!=='boolean')throw Error('한글 화면 표시 상태를 확인하세요.');return setPane(event,expanded);}),
   hangulState:guard(()=>documents.refresh()),
+  hangulCopyPath:guard(()=>{const file=current();copyText(file);return {path:file};}),
   hangulFollow:guard(()=>documents.follow()),
   hangulChoose:guard(async(_args,event)=>{const file=await chooseFile(event);return file?documents.select(file):documents.state();}),
   hangulSelect:guard(async({path:file})=>{await documents.refresh();if(!canSelect(file))throw Error('열린 문서 또는 최근 선택한 문서를 고르세요.');return documents.select(file);}),

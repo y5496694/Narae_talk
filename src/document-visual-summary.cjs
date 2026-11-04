@@ -26,6 +26,6 @@ async function analyzeVisuals({manifest,readPage,request,prompt,send=()=>{},sign
    notes.push({kind:'시각 자료',text:description,source_ids:[source.id],uncertain:uncertain.includes(source.id)});
   }catch(error){if(signal?.aborted)throw error;failed.push({page:page.page+1,error:String(error.message).slice(0,140)});}
  }
- return {notes,pages:notes.length,totalPages:pages.length,uncertain:[...new Set(uncertain)],failed,complete:!failed.length,...(failed.length?{warning:failed.map(p=>p.page+'쪽').join(', ')+' 시각 분석 미확인'}:{})};
+ return {notes,pages:notes.length,totalPages:pages.length,textTablePages:manifest.textTablePages||[],uncertain:[...new Set(uncertain)],failed,complete:!failed.length,...(failed.length?{warning:failed.map(p=>p.page+'쪽').join(', ')+' 시각 분석 미확인'}:{})};
 }
 module.exports={analyzeVisuals,conciseVisual};

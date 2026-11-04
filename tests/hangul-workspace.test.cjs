@@ -49,6 +49,10 @@ test('Hangul document RPCs reject another chat before accessing native state',as
  const {file}=fixture(t);let read=false;const api=hangulMethods({documents:{refresh:async()=>{read=true;return {};}},assertSender:event=>{if(event.sender!=='hangul')throw Error('wrong chat');}});
  await assert.rejects(api.hangulState({}, {sender:'browser'}),/wrong chat/);assert.equal(read,false);await api.hangulState({}, {sender:'hangul'});assert(read);
 });
+test('copy path uses the selected document and is restricted to the Hangul chat',async t=>{
+ const {file}=fixture(t),copied=[],api=hangulMethods({documents:{state:()=>({document:{path:file}})},copyText:text=>copied.push(text),assertSender:event=>{if(event.sender!=='hangul')throw Error('wrong chat');}});
+ await assert.rejects(api.hangulCopyPath({path:'other.hwp'},{sender:'browser'}),/wrong chat/);assert.deepEqual(copied,[]);assert.deepEqual(await api.hangulCopyPath({path:'other.hwp'},{sender:'hangul'}),{path:file});assert.deepEqual(copied,[file]);
+});
 
 test('the document pane expands to the right and folding restores chat dimensions without showing or focusing a window',()=>{
  const {setHangulPane}=require('../src/hangul-window.cjs');let bounds={x:1500,y:100,width:394,height:715},minimum;

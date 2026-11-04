@@ -1,8 +1,20 @@
 """Read-only inventory of visible figures/tables in a generated PDF snapshot."""
-import base64,io,json,re,sys
+import base64,ctypes,io,json,re,sys
 from pathlib import Path
 import pypdfium2 as pdfium
 import pypdfium2.raw as raw
+
+def grid_shape(obj):
+    count=raw.FPDFPath_CountSegments(obj)
+    if count not in (2,5):return False
+    points=[]
+    for index in range(count):
+        segment=raw.FPDFPath_GetPathSegment(obj,index)
+        if raw.FPDFPathSegment_GetType(segment)==1:return False
+        x,y=ctypes.c_float(),ctypes.c_float()
+        if not raw.FPDFPathSegment_GetPoint(segment,ctypes.byref(x),ctypes.byref(y)):return False
+        points.append((x.value,y.value))
+    return all(abs(a[0]-b[0])<.5 or abs(a[1]-b[1])<.5 for a,b in zip(points,points[1:]))
 
 def inspect(request):
     file=Path(request['path']).resolve()
@@ -12,24 +24,35 @@ def inspect(request):
         for number in range(len(document)):
             page=document[number]
             try:
-                width,height=page.get_size();images=0;paths=0;bounds=[]
+                width,height=page.get_size();images=0;paths=0;bounds=[];decoration=[];non_grid=0;grid_lines=0
                 for obj in page.get_objects():
                     if obj.type==raw.FPDF_PAGEOBJ_IMAGE:
                         left,bottom,right,top=obj.get_bounds()
-                        if abs((right-left)*(top-bottom))>=width*height*.002:images+=1;bounds.append([left,bottom,right,top])
+                        area=abs((right-left)*(top-bottom));w,h=abs(right-left),abs(top-bottom)
+                        if area>=width*height*.002:
+                            box=[left,bottom,right,top]
+                            if (h<height*.05 and w/max(h,1)>=10) or (area<width*height*.004 and bottom>height*.82):decoration.append(box)
+                            else:images+=1;bounds.append(box)
                     elif obj.type==raw.FPDF_PAGEOBJ_PATH:
                         left,bottom,right,top=obj.get_bounds()
                         # Hancom can print every glyph as a tiny outline. Those
                         # paths are text, not thousands of separate diagrams.
-                        if abs((right-left)*(top-bottom))>=width*height*.001:paths+=1;bounds.append([left,bottom,right,top])
+                        area=abs((right-left)*(top-bottom))
+                        if area>=width*height*.001 or right-left>width*.25:
+                            grid=grid_shape(obj)
+                            if grid and raw.FPDFPath_CountSegments(obj)==2 and right-left>width*.25:grid_lines+=1
+                            if area>=width*height*.001:
+                                paths+=1;bounds.append([left,bottom,right,top]);non_grid+=not grid
                 textpage=page.get_textpage()
                 try:text=textpage.get_text_range()
                 finally:textpage.close()
                 has_caption=bool(re.search(r'(?:그림|사진|화면|도식|그래프)\s*[\[<(]?\s*\d|\[\s*표\s*\d|(?:Figure|Fig\.?|Table)\s*\d',text,re.I))
+                if has_caption:images+=len(decoration);bounds.extend(decoration)
+                text_table=len(text.strip())>=120 and not images and not has_caption and not non_grid and grid_lines>=3
                 box=[min(b[0] for b in bounds),min(b[1] for b in bounds),max(b[2] for b in bounds),max(b[3] for b in bounds)] if bounds else None
-                result.append({'page':number,'images':images,'vectorObjects':paths,'visual':bool(images or has_caption and paths or paths>=8),'bounds':box,'text':text})
+                result.append({'page':number,'images':images,'decorativeImages':len(decoration),'vectorObjects':paths,'textTable':text_table,'visual':not text_table and bool(images or has_caption and paths or paths>=8),'bounds':box,'text':text})
             finally:page.close()
-    return {'pages':len(result),'visualPages':[{k:v for k,v in p.items() if k!='text'} for p in result if p['visual']],'pageInfo':result}
+    return {'pages':len(result),'visualPages':[{k:v for k,v in p.items() if k!='text'} for p in result if p['visual']],'textTablePages':[p['page'] for p in result if p['textTable']],'pageInfo':result}
 
 def render(request):
     with pdfium.PdfDocument(request['path']) as document:
