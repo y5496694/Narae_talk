@@ -38,6 +38,12 @@ test('a future session timeout notice is not evidence that the session already e
 test('an already open service is reused even when the current agent has no service cache',async()=>{
  const {browser,cfg,submissions}=await fixture('충북');try{await browser.page.goto(cfg.neisUrl+'work');const page=browser.page,result=await ensure({systems:['neis']},{cfg,browser,state:{},login:()=>{throw Error('must use the open service');}});assert(result.reused);assert.equal(browser.page,page);assert.equal(submissions(),0);assert.equal(browser.context.pages().length,1);}finally{await browser.browser?.close();}
 });
+test('existing portal entry finds the real system link beyond a truncated list and excludes the same-name notification tab',async()=>{
+ const {browser,cfg,events}=await fixture('충북');try{
+  await browser.page.goto(new URL('/home',cfg.portalUrl).href);await browser.page.setContent('<title>업무포털 메인</title><button>로그아웃</button>'+Array.from({length:105},(_,i)=>'<button>가상 공지 '+i+'</button>').join('')+'<a id="17" href="javascript:void(0)">나이스</a><a id="https://neis.fixture/" href="https://neis.fixture/work" target="_blank">나이스(새창열림)</a>');
+  const result=await ensure({systems:['neis']},{cfg,browser,state:{},login:()=>{throw Error('must reuse the authenticated portal');}});assert(result.reused,JSON.stringify(result));assert.match(browser.page.url(),/^https:\/\/neis\.fixture\/work/);assert(events.some(e=>e.args.action==='snapshot'&&e.args.filter==='나이스'));assert.equal(events.filter(e=>e.args.action==='click').length,1);
+ }finally{await browser.browser?.close();}
+});
 test('confirmed expiration replaces only the stale work tabs, logs in once, and preserves unrelated tabs and final-attempt records',async()=>{
  const f=await fixture('충북'),{browser,cfg,submissions}=f,state={attempted:true,submitted:true,passwordAttempted:true},signal=new AbortController().signal;try{
   await browser.page.goto(new URL('/home',cfg.portalUrl).href);const portalPage=browser.page,stale=await browser.context.newPage();await stale.goto(cfg.neisUrl+'expired');const personal=await browser.context.newPage();await personal.goto('https://unrelated.fixture/');browser.page=stale;browser.finalAttempts=new Map([['preserve-attempt',{}]]);const profile={region:cfg.region,storage_type:'HardDisk',certificate_name:'가상 인증서',password:'SYNTHETIC_CERT_PASSWORD'};
