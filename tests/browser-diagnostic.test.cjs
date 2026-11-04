@@ -1,0 +1,7 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),{runAgent}=require('../src/agent.cjs'),flow=require('../src/portal-workflow.cjs'),{taskFor}=require('../src/agent-task.cjs');
+test('a bounded screen diagnostic uses only one real observation without a model call, login or mutations',async()=>{
+ const task=taskFor('브라우저 화면 진단 필터 "개인근무"',[],undefined,{portalWorkflow:true});assert(task.diagnostic);assert.equal(flow.plan('브라우저 화면 진단 필터 "개인근무"',task,true),null);const calls=[];
+ const text=await runAgent({prompt:'브라우저 화면 진단 필터 "개인"',toolDomain:'portal',settings:{provider:'local',workspace:'D:/synthetic'},signal:new AbortController().signal,baseTools:[],additionalTools:[{name:'gyomu_browser',parameters:{type:'object',properties:{action:{type:'string',enum:['snapshot','click','fill']}}}}],send:()=>{},request:()=>{throw Error('must not ask the model to replan diagnostics');},execute:async(name,args)=>{calls.push({name,args});return {title:'합성 나이스',url:'https://neis.fixture/work?auth=SYNTHETIC_TOKEN',text:'SYNTHETIC_PRIVATE_BODY',elements:[{ref:'s7/e1',label:'개인 메뉴',id:'observed-id',role:'treeitem',value:'SYNTHETIC_PRIVATE_VALUE'}],frames:[{index:1,name:'work',url:'https://neis.fixture/frame?token=SYNTHETIC_FRAME_TOKEN'}],hasMore:false,totalElements:1};}});
+ assert.deepEqual(calls,[{name:'gyomu_browser',args:{action:'snapshot',limit:20,chars:500,filter:'개인'}}]);assert.match(text,/observed-id/);assert.match(text,/s7\/e1/);assert(!/SYNTHETIC_/.test(text));assert.match(text,/neis.fixture\/frame/);
+});

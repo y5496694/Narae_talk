@@ -14,6 +14,7 @@ const school=/나이스|NEIS|복무|조퇴|연가|근무상황|개인결재선|�
 const navigationLabel=label=>String(label||'').replace(/\s/g,'').replace(/\(새창열림\)$/,'').replace(/^선택됨,/,'').replace(/\d+단계(?:메뉴항목)?$/,'');
 const navigationKey=e=>e.id||JSON.stringify([e.role,e.tag,navigationLabel(e.label)]);
 function taskFor(prompt,history=[],now=new Date(),{portalWorkflow=false}={}){
+ const diagnostic=require('./browser-diagnostic.cjs').task(prompt);if(diagnostic)return diagnostic;
  const requisition=requisitionTask(prompt);if(requisition)return requisition;
  const cycle=cycleTask(prompt);if(cycle)return cycle;
  const query=queryTask(prompt);if(query)return query;
@@ -50,6 +51,7 @@ function fieldMatches(label,current,expected){
  return actual===wanted||/^\d{1,2}$/.test(actual)&&/^\d{1,2}$/.test(wanted)&&Number(actual)===Number(wanted);
 }
 function taskStep(task,input,all){
+ if(task?.area==='browser-diagnostic')return require('./browser-diagnostic.cjs').step(task,input,all);
  if(task?.area==='ezedu')return ezeduStep(task,input,all);
  if(task?.area==='requisition')return requisitionStep(task,input,all);
  if(task?.area==='office-query')return queryStep(task,input,all);
