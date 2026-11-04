@@ -21,6 +21,19 @@
 
 ## 필요한 친구 추가
 
+실행 중인 나래톡의 같은 대화·업무 브라우저는 `narae-talk live`로 직접 제어할 수 있습니다.
+
+```powershell
+narae-talk live status
+narae-talk live conversation --friend portal --last 5
+narae-talk live send --friend portal --prompt-file D:\Codex\tmp\요청.txt
+narae-talk live job 작업ID
+narae-talk live tool --friend portal --name gyomu_browser --args-file D:\Codex\tmp\명령.json
+narae-talk live stop
+```
+
+`live tools --friend portal`은 지원 스키마를, `live update-check`는 Git 업데이트를 조회합니다. 확인한 커밋은 `live update --commit 전체커밋`으로 설치하고 자동 재시작합니다. CLI는 현재 Windows 사용자 저장소로 인증한 로컬 파이프에 연결하며, 앱의 기존 승인 설정·친구별 도구 범위·최종 처리 검증을 그대로 사용합니다. 별도 모델이나 브라우저를 띄우지 않습니다.
+
 친구 목록 오른쪽 위의 **친구 추가** 버튼에서 **나래교무 이지에듀**, **나래교무 하이클래스**, **나래 무비 메이커**를 고를 수 있습니다. **추가**를 누르면 “친구를 추가하고 있습니다.” 창과 진행률이 표시됩니다. 원본 GitHub의 CLI·스킬 또는 공식 CLI 배포본을 받고 SHA-256과 실행 준비를 확인한 뒤 친구로 등록합니다. 실패·취소 시에는 추가하지 않으며, 설치한 친구는 재실행 후에도 유지됩니다.
 
 나이스·K-에듀파인·WXS는 선택 지역의 **나래교무 포탈(지역명)** 친구 하나로 사용합니다. **카카오톡 친구는 PC 카카오톡 CLI**이며 설정의 원격 챗봇 연동과 별개입니다. 하이클래스는 원본 브라우저 작업 스킬과 나래 브라우저를 함께 사용합니다. 무비 메이커는 GUI 없는 독립 CLI 배포본(약 489MB)을 받습니다.
