@@ -34,6 +34,7 @@ test('unverified completion, failed tools and pending login stop dependent tasks
  assert.equal(blockedResult('작성된 문서를 읽었습니다.',[{name:'read_document',args:{},value:{text:'실제 본문'}}],undefined,'작성된 문서 읽어줘'),null);
  assert.equal(blockedResult('기사에서 실패 사례를 확인했습니다.',[],{complete:true},'기사 읽어줘'),null);
 });
+test('verified CBE prepare envelopes count as sends but pending, dry-run and unverified results never do',()=>{for(const value of [{ok:true,result:{sent:true,verified:true}},{sent:true,verified:true}])assert.equal(blockedResult('쪽지 전송 검증',[{name:'gyomu_cbe_prepare',args:{kind:'note'},value}],undefined,'쪽지 보내줘'),null);for(const value of [{ok:true},{ok:true,result:{sent:false,verified:true}},{ok:true,result:{sent:true}},{ok:true,result:{sent:true,verified:false}},{ok:false,result:{sent:true,verified:true}},{pending:true},{error:'response lost'}])assert(blockedResult('전송 완료',[{name:'gyomu_cbe_prepare',args:{kind:'note'},value}],undefined,'쪽지 보내줘'));assert(blockedResult('준비만 완료',[{name:'unrelated_prepare',args:{},value:{sent:true,verified:true}}],undefined,'쪽지 보내줘'));});
 test('cancellation preserves completed tasks and never starts the remaining tasks',async()=>{
  const controller=new AbortController(),plans=[];let calls=0;
  await assert.rejects(runPlan({prompt:'네이버 들어가고 다음 들어가고 구글 들어가',signal:controller.signal,send:e=>{if(e.type==='taskPlan')plans.push(e.plan);},execute:async()=>({url:'https://example.org/'})},async options=>{calls++;if(calls===2)controller.abort();options.onOutcome({complete:true});return '사이트 열기 확인';}));

@@ -50,7 +50,7 @@ async function runSingle({prompt,context,settings,request,execute,send,signal,hi
   if(!portalStep&&!['web','ezedu'].includes(task?.area)&&!step.context?.nativeDialog&&!step.receipt)step=wxsStep(prompt,input,step,task);
   if(!portalStep&&!['web','ezedu','draft-cycle','requisition'].includes(task?.area)&&!step.context?.nativeDialog&&!step.receipt)step=liveDocumentStep(prompt,input,availableTools,documentContext,settings.workspace)||documentStep(prompt,input,availableTools,settings.workspace,!task&&!/수정|편집|여러|각각|비교|요약|첨부|전송|보내/.test(prompt),context)||step;
   if(!portalStep&&!task&&!step.required&&!step.receipt)step=imageStep(prompt,input,availableTools,settings.workspace,context)||step;
-  if(step.receipt){onOutcome({complete:step.complete,verified:step.verified===true,reason:step.complete===false?step.receipt:undefined});send({type:'text',text:step.receipt});return step.receipt;}
+  if(step.receipt){onOutcome({complete:step.complete,pending:step.pending===true,verified:step.verified===true,reason:step.complete===false?step.receipt:undefined});send({type:'text',text:step.receipt});return step.receipt;}
   if(step.complete!==undefined)onOutcome({complete:step.complete});
   if(task?.area==='web'&&settings.provider==='local'&&step.webDocuments){onOutcome({complete:step.webDocuments.length>=task.count});return require('./browser-report.cjs').browserReport({documents:step.webDocuments,task,prompt,request,send,signal});}
   if(step.documentSummary&&step.context?.documents){

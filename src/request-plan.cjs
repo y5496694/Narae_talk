@@ -36,7 +36,7 @@ function splitRequest(prompt,{portalWorkflow=false}={}){
  return merged;
 }
 function expectedMutation(prompt){return /(?:만들|작성|생성|수정|편집|저장|출력|변환|보내|전송|등록|삭제|신청|상신|결재|첨부|다운로드)\s*(?:해|하|줘|만|라|어|고|받|부탁|$)/.test(maskPayload(prompt));}
-function mutationTool(name,args={}){return /^(?:create_|edit_|export_)/.test(name)||/^(?:send|add|apply|save|delete|submit|confirm|export|download|run|replace|edit|create)/.test(args.operation||args.action||'');}
+function mutationTool(name,args={}){return name==='gyomu_cbe_prepare'||/^(?:create_|edit_|export_)/.test(name)||/^(?:send|add|apply|save|delete|submit|confirm|export|download|run|replace|edit|create)/.test(args.operation||args.action||'');}
 function blockedResult(text,evidence,outcome,prompt=''){
  if(outcome?.complete===false)return outcome.reason||'현재 단계의 완료를 확인하지 못했습니다.';
  // A verified receipt is set by a domain executor after its own readback or
@@ -82,7 +82,7 @@ async function runPlan(options,runSingle){
     options.signal.throwIfAborted();checks.startCheck();reason=failed?String(failed.code||failed.message):blockedResult(text,evidence,outcome,parts[i]);
     if(!reason){task.status='completed';checks.finish(null);break;}
     task.reason=String(reason).slice(0,400);checks.finish(reason);
-    const waiting=allEvidence.some(e=>e.value?.pending||e.value?.approval||e.value?.requiresLogin||hardStop(e.value?.code||e.value?.error||''));
+    const waiting=outcome?.pending===true||allEvidence.some(e=>e.value?.pending||e.value?.approval||e.value?.requiresLogin||hardStop(e.value?.code||e.value?.error||''));
     if(options.replan!==true||attempt>=2||waiting||hardStop(reason)){task.status='blocked';break;}
     recoveryReadOnly=allEvidence.some(e=>!readonly(e.name,e.args));
     task.status='in_progress';options.send({type:'status',text:'작업 실패 원인을 반영해 계획을 재조정하고 있습니다. ('+(attempt+1)+'/2)'});publish();
