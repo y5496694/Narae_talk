@@ -37,6 +37,8 @@ jobs:
         run: npm run test:talk:desktop
       - name: Memo, calendar, notifications and group rooms
         run: node tests/talk-personal-desktop.cjs
+      - name: Native clipboard empty-placeholder and byte-preserving restoration
+        run: node tests/clipboard-native-desktop.cjs
       - name: Ezedu bounded read and message clipboard copy
         run: node tests/talk-ezedu-desktop.cjs
       - name: Messenger titles, numbered follow-ups, attachments and recipient selection

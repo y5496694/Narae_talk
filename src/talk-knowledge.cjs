@@ -6,7 +6,7 @@ const clean=(text,max=1200)=>{if(typeof text!=='string'||!text.trim()||text.leng
 const safeId=id=>{if(typeof id!=='string'||!/^[-a-zA-Z0-9_]{1,80}$/.test(id)||['__proto__','constructor','prototype','builtin','defaults'].includes(id))throw Error('기억 범위를 확인하세요.');return id;};
 const hash=text=>createHash('sha256').update(text).digest('hex').slice(0,24);
 function readonly(name,args={}){if(/^(?:list_|read_|inspect_)/.test(name)||/_(?:skill_read|addon_read|system_status|capabilities)$/.test(name))return true;if(name==='gyomu_browser')return ['snapshot','read','tabs','frames','wait','open','search','back'].includes(args.action);return /^(?:read|list|query|status|search|lookup|files|detail|inbox|history)$/.test(args.operation||args.action||'');}
-function hardStop(reason){return /승인|거절|로그인|비밀번호|인증|권한|사용자.*중지|취소|pending|approval|denied|cancel|permission|unauthori[sz]ed|EXECUTION_UNKNOWN|execution.?uncertain/i.test(String(reason));}
+function hardStop(reason){return /승인|거절|로그인|비밀번호|인증|권한|사용자.*중지|취소|pending|approval|denied|cancel|permission|unauthori[sz]ed|login|sign[_ -]?in|auth(?:entication|orization)|auth[_ -](?:required|failed|expired)|credential|session[_ -]expired|EXECUTION_UNKNOWN|execution.?uncertain/i.test(String(reason));}
 class TalkKnowledge {
  constructor(home){this.file=path.join(home,'data/talk-knowledge.json');}
  read(){let data;try{data=JSON.parse(fs.readFileSync(this.file,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;data={schema:1,revision:0,user:{memories:[],skills:[]},friends:{},runs:[]};}if(data.schema!==1||!data.user||!data.friends||!Array.isArray(data.runs))throw Error('기억 저장소 형식을 확인하세요.');return data;}
