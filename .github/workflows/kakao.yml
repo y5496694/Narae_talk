@@ -53,6 +53,8 @@ jobs:
         run: node tests/browser-talk-desktop.cjs
       - name: Browser navigation, approval status and cancellation isolation
         run: node tests/browser-navigation-desktop.cjs
+      - name: User and friend memory, readonly defaults, and hosted EXAONE API settings
+        run: node tests/talk-learning-desktop.cjs
       - name: Package complete source
         run: npm run package
       - name: Upload sanitized synthetic verification only

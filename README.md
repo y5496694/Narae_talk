@@ -67,6 +67,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
 설정에서 다음을 관리합니다.
 
 - AI OAuth/API 연결, 외부 로컬 AI 서버, 나래1~4 모델 다운로드·가져오기·실행
+- **K-EXAONE 2.5 공식 API**: 설정 → AI 연결 → K-EXAONE 2.5에서 API 키만 저장합니다. 주소 `https://api.exaone.ai/v1/chat/completions`와 모델 `k-exaone_v2.5`는 자동 설정되며, 모델 다운로드·로컬 서버 실행은 필요하지 않습니다. **API 연결 확인**은 저장한 키로 실제 요청을 보내며, 키 발급 절차는 [공식 문서](https://docs.exaone.ai/ko/docs/overview)를 따릅니다. 텍스트·도구 실행을 지원하고 이미지 입력은 지원하지 않습니다. GPT·Claude·나래AI 설정과 키는 별도로 유지합니다.
 - 카카오톡·텔레그램·지역 메신저 연동
 - 업무포털 인증서와 브라우저 연결
 - 직업·지역 프로필과 예약 작업

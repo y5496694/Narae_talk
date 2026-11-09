@@ -78,7 +78,7 @@
    <section id="aiSettingsPanel" class="settings-panel" role="tabpanel" aria-labelledby="settingsAITab" hidden><h3>AI 연결</h3>
 <p class="muted">사용할 AI를 선택하고 아래에서 연결을 설정하세요.</p>
 <div class="ai-provider-choices" role="group" aria-label="AI 제공자">
-<button id="localAIButton" type="button" data-ai-provider="managed" aria-pressed="false" aria-controls="localAIDialog"><span class="provider-symbol narae-provider"><img src="assets/narae-talk.svg" alt=""></span><strong>나래AI</strong><small>로컬</small></button><button id="gptAIButton" type="button" data-ai-provider="openai" aria-pressed="false" aria-controls="cloudAIFields"><span class="provider-symbol">G</span><strong>GPT</strong><small>OAuth · API</small></button><button id="claudeAIButton" type="button" data-ai-provider="anthropic" aria-pressed="false" aria-controls="cloudAIFields"><span class="provider-symbol claude-provider">✳</span><strong>Claude</strong><small>OAuth · API</small></button><button id="exaoneAIButton" type="button" data-ai-provider="exaone" aria-pressed="false" aria-controls="cloudAIFields"><span class="provider-symbol">E</span><strong>EXAONE</strong><small>텍스트 · 도구 실행</small></button><button id="otherAIButton" type="button" data-ai-provider="external" aria-pressed="false" aria-controls="otherAIFields"><span class="provider-symbol">···</span><strong>기타</strong><small>다른 로컬 서버</small></button>
+<button id="localAIButton" type="button" data-ai-provider="managed" aria-pressed="false" aria-controls="localAIDialog"><span class="provider-symbol narae-provider"><img src="assets/narae-talk.svg" alt=""></span><strong>나래AI</strong><small>로컬</small></button><button id="gptAIButton" type="button" data-ai-provider="openai" aria-pressed="false" aria-controls="cloudAIFields"><span class="provider-symbol">G</span><strong>GPT</strong><small>OAuth · API</small></button><button id="claudeAIButton" type="button" data-ai-provider="anthropic" aria-pressed="false" aria-controls="cloudAIFields"><span class="provider-symbol claude-provider">✳</span><strong>Claude</strong><small>OAuth · API</small></button><button id="exaoneAIButton" type="button" data-ai-provider="exaone" aria-pressed="false" aria-controls="cloudAIFields"><span class="provider-symbol">E</span><strong>K-EXAONE 2.5</strong><small>공식 API</small></button><button id="otherAIButton" type="button" data-ai-provider="external" aria-pressed="false" aria-controls="otherAIFields"><span class="provider-symbol">···</span><strong>기타</strong><small>다른 로컬 서버</small></button>
 </div>
 <section id="localAIDialog" class="ai-provider-panel" aria-labelledby="localAITitle" hidden><h4 id="localAITitle">나래AI 모델</h4>
 <p class="model-dialog-intro">기본 모델은 나래4입니다. 설치하면 본체·학습 어댑터·시각 프로젝터·판단기를 함께 받습니다. 사용을 누르면 선택한 모델을 이 PC에서 실행합니다.</p>
@@ -93,7 +93,7 @@
 <p id="localAIError" role="alert"></p></section>
    <section id="cloudAIFields" class="ai-provider-panel" aria-labelledby="cloudProviderTitle" hidden><form id="settingsForm">
 <h4 id="cloudProviderTitle">GPT 연결</h4>
-<p class="muted">사용할 AI와 연결 방식을 선택하세요. OAuth와 API 설정은 각각 보관합니다.</p>
+<p id="cloudConnectionHelp" class="muted">사용할 AI와 연결 방식을 선택하세요. OAuth와 API 설정은 각각 보관합니다.</p>
 <div class="connection-mode-field"><label>연결 방식<select id="connectionMode"><option value="oauth">OAuth 계정 연결 (기본)</option>
 <option value="api">API 키</option>
 </select></label></div>
@@ -104,6 +104,7 @@
 </div>
 <button id="usage" type="button" class="text-button">사용량 · 연결 앱 확인 ↗</button>
 </div>
+<div id="exaoneAPIHelp" class="info" hidden><p>K-EXAONE 2.5 공식 API를 사용합니다. 모델 다운로드나 로컬 서버 실행 없이 발급받은 API 키만 입력하세요. 텍스트 대화와 도구 실행을 지원합니다.</p><div class="button-row"><button id="exaonePlatform" type="button">API 키 발급 페이지 ↗</button><button id="exaoneCheck" type="button">API 연결 확인</button></div></div>
 <div id="apiFields" hidden>
 <label>API 주소<input id="endpoint" type="url" spellcheck="false"></label><label>API 키<input id="apiKey" type="password" autocomplete="off" placeholder="새 키를 저장할 때만 입력"></label><small id="keyStatus"></small>
 </div>

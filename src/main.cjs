@@ -223,6 +223,8 @@ const methods={
  read:async args=>execute('read_live_document',args),
  create:async args=>{idle();return execute('create_document',args);},
  models,
+ exaonePlatform:()=>shell.openExternal(require('./exaone.cjs').PLATFORM_URL),
+ exaoneCheck:async()=>{idle();if(settings.provider!=='exaone')throw Error('EXAONE을 먼저 선택하세요.');const config=structuredClone(settings),active=startTask();try{const result=await cloudRequest(config,{input:[{role:'user',content:'한국어로 짧게 인사해 주세요.'}],tools:[],max_output_tokens:4096},active.signal);return {model:config.model,text:provider.responseText(result)};}finally{active.finish();}},
  login:async({add=false}={})=>{idle();const profileId=add?undefined:oauth.state().selected[settings.provider];await oauth.login({provider:settings.provider,profileId});try{const catalog=await models();if(catalog.length&&!catalog.some(item=>item.id===settings.model))persist(connections.update(settings,{model:catalog[0].id}));}catch(error){emit({type:'error',text:'계정은 연결되었습니다. 모델 목록 확인: '+error.message});}return metadata();},
  cancelLogin:()=>oauth.cancel(),
  selectAccount:async({id})=>{idle();await oauth.select(settings.provider,id);return metadata();},
