@@ -7,5 +7,6 @@
 vendor/narae-gyomu/** -text
 vendor/kakao-cli/** -text
 vendor/narae-messenger-cli/** -text
+vendor/cbe-messenger-cli/** -text
 # Preserve the upstream license text verbatim, including its spacing.
 resources/model-licenses/** -text -whitespace
