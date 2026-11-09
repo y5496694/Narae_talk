@@ -1,7 +1,7 @@
 {
   "name": "narae-talk",
   "productName": "나래톡",
-  "version": "0.13.0-preview.68",
+  "version": "0.13.0-preview.69",
   "description": "나래 시리즈를 사용하여 교육 업무를 포함한 다양한 업무를 도와주는 에이전트",
   "license": "MIT",
   "author": "인호우",
@@ -20,7 +20,8 @@
     "cli:talk": "node src/talk-cli.cjs",
     "test:talk:desktop": "node tests/talk-desktop.cjs",
     "test:talk:update": "node tests/talk-update-desktop.cjs",
-    "start:office": "electron . --office"
+    "start:office": "electron . --office",
+    "test:talk:learning": "node tests/talk-learning-desktop.cjs"
   },
   "devDependencies": {
     "electron": "44.9.1",

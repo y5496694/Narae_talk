@@ -31,7 +31,7 @@ function splitRequest(prompt,{portalWorkflow=false}={}){
  if(parts.length<2||parts.some(p=>!action.test(maskPayload(p))))return [prompt.trim()];
  // Reading/searching and its summary are one evidence-preserving workflow.
  const merged=[];
- for(const part of parts){if(merged.length&&/^(?:(?:그\s*)?(?:내용|결과|본문|자료)(?:을|를)?\s*)?(?:요약|정리|비교)(?:해|하|해줘|해봐|해\s*줘|해주세요|해줘요|해봐요|해라|해서|하고)?[.!?\s]*$/.test(part))merged[merged.length-1]+=' 그리고 '+part;else merged.push(part);}
+ for(const part of parts){if(merged.length&&/^(?:(?:그\s*)?(?:내용|결과|본문|자료|기사)(?:\s*\d+\s*개)?(?:을|를)?\s*)?(?:요약|정리|비교)(?:해|하|해줘|해봐|해\s*줘|해주세요|해줘요|해봐요|해라|해서|하고)?[.!?\s]*$/.test(part))merged[merged.length-1]+=' 그리고 '+part;else merged.push(part);}
  if(merged.length>MAX_TASKS)throw Error('한 요청의 작업 목록은 최대 '+MAX_TASKS+'개입니다. 요청을 나누어 주세요.');
  return merged;
 }
@@ -62,27 +62,42 @@ function planText(plan,results){
 async function runPlan(options,runSingle){
  const parts=splitRequest(options.prompt,options),multiple=parts.length>1;
  if(!parts.length||!multiple&&(!action.test(maskPayload(options.prompt))||/사용법|방법.*설명|절차.*설명|기능.*(?:개발|보완)|가능(?:해|하|한)|할 수 있/.test(maskPayload(options.prompt))))return runSingle(options);
- const plan={id:randomUUID(),tasks:parts.map((prompt,i)=>({id:'task-'+(i+1),title:prompt.slice(0,240),status:'pending'}))},results=[],history=[...(options.history||[])];
+ const {readonly,hardStop}=require('./talk-knowledge.cjs');
+ const plan={id:randomUUID(),tasks:parts.map((prompt,i)=>({id:'task-'+(i+1),title:prompt.slice(0,240),status:'pending',attempts:0,observations:[],recovery:[]}))},results=[],history=[...(options.history||[])];
  let context=options.context,documentContext=options.documentContext;
  const publish=()=>options.send({type:'taskPlan',plan:structuredClone(plan)}),checklists=plan.tasks.map((task,i)=>require('./task-checklist.cjs').checklist(task,parts[i],publish));publish();
- for(let i=0;i<parts.length;i++){
-  const task=plan.tasks[i],evidence=[];let outcome;const checks=checklists[i];
+ try {for(let i=0;i<parts.length;i++){
+  const task=plan.tasks[i],allEvidence=[];let outcome,text='',reason,recovery='',recoveryReadOnly=false;const checks=checklists[i];
   try{
-   options.signal.throwIfAborted();task.status='in_progress';publish();
-   const text=await runSingle({...options,context,documentContext,prompt:parts[i],history,planContext:results.map((result,n)=>({task:parts[n],result:result.slice(0,2000)})).slice(-6),agentInstructions:(options.agentInstructions||'')+(multiple?'\n원래 사용자 요청 전체(금지·범위·수신자·파일 조건을 모두 유지):\n'+options.prompt+'\n현재 작업 '+(i+1)+'/'+parts.length+'만 수행하고 나머지는 실행기가 순서대로 처리합니다. 이전 작업의 결과는 대화 기록에서 확인하세요.':''),onOutcome:value=>{outcome=value;options.onOutcome?.(value);},send:event=>{if(!multiple||event.type!=='text')options.send(event);},execute:(name,args,signal,observed)=>checks.execute(name,args,signal,async()=>{try{const value=await options.execute(name,args,signal);evidence.push({name,args,value});return value;}catch(error){evidence.push({name,args,value:{error:error.message}});throw error;}},observed)});
-   options.signal.throwIfAborted();results.push(text);
-   checks.startCheck();const reason=blockedResult(text,evidence,outcome,parts[i]);task.status=reason?'blocked':'completed';if(reason)task.reason=String(reason).slice(0,400);checks.finish(reason);
-   if(reason)break;
-   // Carry only verified tool observations into dependent document tasks. A
-   // newly created file replaces the old context; a live edit carries its
-   // actual readback selection rather than the stale pre-edit coordinates.
-   const created=evidence.findLast(e=>e.name==='create_document'&&!e.value?.error&&e.value?.path);
+   for(let attempt=0;attempt<(options.replan===true?3:1);attempt++){
+    options.signal.throwIfAborted();task.status='in_progress';task.attempts=attempt+1;delete task.reason;publish();
+    const evidence=[];outcome=undefined;let failed;
+    try {
+     text=await runSingle({...options,context,documentContext,prompt:parts[i],history,planContext:results.map((result,n)=>({task:parts[n],result:result.slice(0,2000)})).slice(-6),agentInstructions:(options.agentInstructions||'')+(multiple?'\n원래 사용자 요청 전체(금지·범위·수신자·파일 조건을 모두 유지):\n'+options.prompt+'\n현재 작업 '+(i+1)+'/'+parts.length+'만 수행하고 나머지는 실행기가 순서대로 처리합니다. 이전 작업의 결과는 대화 기록에서 확인하세요.':'')+(recovery?'\n[실패 후 재조정한 계획]\n'+recovery+'\n이전 실행의 도구 관찰:\n'+JSON.stringify(allEvidence.slice(-12).map(e=>({name:e.name,ok:!e.value?.error&&e.value?.success!==false,readOnly:readonly(e.name,e.args)})))+(recoveryReadOnly?'\n이전 변경은 실행 여부가 불확실하므로 조회·검증만 허용됩니다. 변경·발송·삭제를 재실행하지 마세요.':''):''),onOutcome:value=>{outcome=value;options.onOutcome?.(value);},send:event=>{if(event.type!=='text'||!multiple&&!options.replan)options.send(event);},execute:(name,args,signal,observed)=>checks.execute(name,args,signal,async()=>{
+      if(recoveryReadOnly&&!readonly(name,args))throw Object.assign(Error('이전 변경을 반복하지 않습니다. 조회로 실행 결과를 확인하세요.'),{code:'REPLAN_READ_ONLY'});
+      try{const value=await options.execute(name,args,signal);const e={name,args,value};evidence.push(e);allEvidence.push(e);task.observations.push({name,ok:!value?.error&&value?.success!==false&&value?.ok!==false,readOnly:readonly(name,args)});return value;}
+      catch(error){const e={name,args,value:{error:error.code||error.message}};evidence.push(e);allEvidence.push(e);task.observations.push({name,ok:false,readOnly:readonly(name,args)});throw error;}
+     },observed)});
+    }catch(error){if(options.replan!==true||options.signal.aborted||hardStop(error.code+' '+error.message))throw error;failed=error;}
+    options.signal.throwIfAborted();checks.startCheck();reason=failed?String(failed.code||failed.message):blockedResult(text,evidence,outcome,parts[i]);
+    if(!reason){task.status='completed';checks.finish(null);break;}
+    task.reason=String(reason).slice(0,400);checks.finish(reason);
+    const waiting=allEvidence.some(e=>e.value?.pending||e.value?.approval||e.value?.requiresLogin||hardStop(e.value?.code||e.value?.error||''));
+    if(options.replan!==true||attempt>=2||waiting||hardStop(reason)){task.status='blocked';break;}
+    recoveryReadOnly=allEvidence.some(e=>!readonly(e.name,e.args));
+    task.status='in_progress';options.send({type:'status',text:'작업 실패 원인을 반영해 계획을 재조정하고 있습니다. ('+(attempt+1)+'/2)'});publish();
+    const advice=options.replanTask?await options.replanTask({task:parts[i],originalPrompt:options.prompt,reason:task.reason,readOnly:recoveryReadOnly,attempt:attempt+1,observations:task.observations.slice(-12)},options.signal):'실패한 원인을 확인하고 이전과 다른 조회·접근으로 남은 단계만 처리합니다.';
+    options.signal.throwIfAborted();recovery=String(advice||'실패 원인을 먼저 조회하고 남은 작업만 진행합니다.').slice(0,2500);task.recovery.push({attempt:attempt+1,reason:task.reason,plan:recovery});publish();
+   }
+   results.push(text||'현재 단계의 실행 결과를 확인하지 못했습니다.');publish();
+   if(task.status!=='completed')break;
+   const created=allEvidence.findLast(e=>e.name==='create_document'&&!e.value?.error&&e.value?.path);
    if(created){context=created.value.path;if(documentContext||options.toolDomain==='hangul')documentContext={path:context,live:false};}
-   else if(documentContext?.live){const read=evidence.findLast(e=>e.name==='read_live_document'&&!e.value?.error&&e.args.path===documentContext.path);if(read)documentContext={...documentContext,selection:read.value.selection||null};}
+   else if(documentContext?.live){const read=allEvidence.findLast(e=>e.name==='read_live_document'&&!e.value?.error&&e.args.path===documentContext.path);if(read)documentContext={...documentContext,selection:read.value.selection||null};}
    history.push({role:'user',content:parts[i]},{role:'assistant',content:text});
   }catch(error){task.status=options.signal.aborted?'cancelled':'blocked';task.reason=options.signal.aborted?'사용자가 작업을 중지했습니다.':String(error.message).slice(0,400);checks.stop(task.reason,options.signal.aborted);error.taskPlan=structuredClone(plan);throw error;}
- }
- if(!multiple){const text=results[0];if(plan.tasks[0].status==='blocked'&&!incomplete.test(text)){const note='\n\n완료 미확인: '+plan.tasks[0].reason;options.send({type:'text',text:note});return text+note;}return text;}
+ }}finally {options.onPlan?.(structuredClone(plan),{cancelled:options.signal.aborted});}
+ if(!multiple){const text=results[0],blocked=plan.tasks[0].status==='blocked',note=blocked&&!incomplete.test(text)?'\n\n완료 미확인: '+plan.tasks[0].reason:'';if(options.replan)options.send({type:'text',text:text+note});else if(note)options.send({type:'text',text:note});return text+note;}
  const text=planText(plan,results);options.send({type:'text',text});return text;
 }
 module.exports={splitRequest,runPlan,blockedResult,MAX_TASKS};

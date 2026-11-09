@@ -58,6 +58,7 @@ function anthropicResult(result){
  return {output,usage:result.usage};
 }
 async function requestResponse({settings,apiKey,credential,signal,body,timeout=180000}){
+ if(settings.provider==='exaone')return require('./exaone.cjs').request({settings,apiKey,signal,body});
  if(!settings.model?.trim())throw new Error('연결 설정에서 사용할 AI 모델을 선택하세요.');const provider=credential?.provider||settings.provider||'openai',oauth=(credential?.mode||settings.connectionMode)==='oauth';
  const data=provider==='anthropic'?anthropicBody(body,settings.model.trim()):{...(oauth?openaiOAuthBody(body):body),model:settings.model.trim(),store:false};
  const response=await fetch(endpoint(settings,credential),{method:'POST',headers:headers(settings,credential,apiKey),body:JSON.stringify(data),redirect:'error',signal:signalFor(signal,timeout)});
@@ -65,6 +66,7 @@ async function requestResponse({settings,apiKey,credential,signal,body,timeout=1
  let result;try{result=await response.json();}catch{throw new Error('AI 응답을 읽지 못했습니다 ('+response.status+').');}if(!response.ok)throw new Error(result.error?.message||'AI 연결 오류 ('+response.status+')');return provider==='anthropic'?anthropicResult(result):result;
 }
 async function listModels({settings,apiKey,credential,signal}){
+ if(settings.provider==='exaone')return require('./exaone.cjs').listModels({settings,apiKey,signal});
  const response=await fetch(endpoint(settings,credential,true),{headers:headers(settings,credential,apiKey),redirect:'error',signal:signalFor(signal,20000)});let result;try{result=await response.json();}catch{throw new Error('모델 목록을 읽지 못했습니다.');}if(!response.ok)throw new Error(result.error?.message||'모델 목록을 가져오지 못했습니다 ('+response.status+').');
  const oauth=credential?.mode==='oauth'&&credential.provider==='openai',items=oauth?result.models:result.data;
  if(!Array.isArray(items))throw new Error('계정이 반환한 모델 목록 형식을 확인하세요.');return items.filter(item=>!oauth||item.visibility==='list').map(item=>({id:item.slug||item.id,name:item.display_name||item.slug||item.id})).filter(item=>typeof item.id==='string'&&item.id.length>0);
