@@ -1,6 +1,8 @@
 'use strict';
 const waiting='로그인 대기 · 요청한 업무는 아직 실행하지 않았습니다.';
 const continuation=/^(?:(?:로그인|인증)\s*(?:완료(?:했(?:어|어요|습니다|음))?|했(?:어|어요|습니다|음)|됐(?:어|어요|습니다))|(?:계속|이어서)(?:\s*(?:해줘|해주세요|진행해줘|처리해줘))?|진행해(?:줘|주세요)?)[.!~\s]*$/;
+function requestText(prompt){return String(prompt||'').split('\n첨부 파일 (')[0].replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|“[^”]*”|「[^」]*」/g,'');}
+function schoolRequest(prompt){return /나이스|NEIS|에듀파인|공문|복무|조퇴|연가|출장|기안|결재|공람|포[털탈]/i.test(requestText(prompt));}
 function isPortal(domain){const friend=require('./talk-store.cjs').definition(domain);return domain==='portal'||friend?.kind==='portal';}
 function resume(prompt,history,enabled){
  if(!enabled||!continuation.test(prompt.trim()))return prompt;
@@ -8,8 +10,8 @@ function resume(prompt,history,enabled){
 }
 function plan(prompt,task,enabled){
  if(!enabled||['web','cbe','ezedu','session','office-query','benchmark'].includes(task?.area)||task?.diagnostic||task?.nativeRead||/사용법|방법|절차|설명해|어떻게.*(?:쓰|사용)|기능.*(?:개발|보완)/.test(prompt))return null;
- if(!task&&!/조회|보여|목록|찾아|업무|나이스|에듀파인|로그인|열어|들어가|신청|상신|기안/.test(prompt))return null;
- const neis=/나이스|NEIS|복무|연가|조퇴|출장|근무상황/i.test(prompt)||/^neis/.test(task?.area||'')||/^neis/.test(task?.preparation?.area||''),edufine=/에듀파인|공문|공람|기안|문서등록대장|문서진행/.test(prompt)||['edufine','edufine-lifecycle','draft-cycle','requisition'].includes(task?.area)||task?.area==='school-final'&&!neis;
+ if(!task&&!schoolRequest(prompt)&&!/조회|보여|목록|찾아|업무|로그인|열어|들어가|신청|상신/.test(prompt))return null;
+ const neis=/나이스|NEIS|복무|연가|조퇴|출장|근무상황/i.test(prompt)||/^neis/.test(task?.area||'')||/^neis/.test(task?.preparation?.area||''),edufine=/에듀파인|공문|공람|기안|문서등록대장|문서진행/.test(prompt)||['edufine','edufine-lifecycle','draft-cycle','requisition'].includes(task?.area)||(task?.area==='school-final'||/결재/.test(prompt))&&!neis;
  const work=/조회|보여|목록|검색|공람|복무|연가|조퇴|출장|신청|기안|상신|결재|정리|내용|알려|등록|작성|읽어|처리/.test(prompt);
  return {systems:[...(neis?['neis']:[]),...(edufine?['edufine']:[])],navigationOnly:!work,allowLocalAccess:!/로컬[^\n.]{0,40}(?:허용하지|연결하지|접근하지|처리하지|허용\s*금지)/.test(prompt)};
 }
@@ -24,4 +26,4 @@ function step(plan,input,all){
  if(!input.slice(input.indexOf(call)+1).some(item=>item.type==='function_call'&&item.name==='gyomu_browser'))return fixed('gyomu_browser',{action:'snapshot'},'로그인 도구가 연결한 실제 업무 창의 최신 화면을 읽고 원래 요청을 이어간다. 로그인만 완료했다고 업무까지 완료한 것으로 답하지 않는다.');
  return null;
 }
-module.exports={waiting,isPortal,resume,plan,step};
+module.exports={waiting,isPortal,resume,plan,step,schoolRequest,requestText};

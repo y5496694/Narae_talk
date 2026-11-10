@@ -5,7 +5,7 @@ const statuses={pending:['○','대기'],in_progress:['●','진행 중'],comple
 const expanded=new Map();
 function element(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=String(text);if(cls)e.className=cls;return e;}
 function state(s){return statuses[s]||statuses.pending;}
-function clock(at){const d=new Date(at);return Number.isFinite(at)&&!Number.isNaN(d.valueOf())?d.toLocaleTimeString('ko-KR',{hour12:false}):'';}
+function clock(at){const d=new Date(at);return Number.isFinite(at)&&!Number.isNaN(d.valueOf())?d.toLocaleTimeString('ko-KR',{timeZone:'Asia/Seoul',hour12:false}):'';}
 function renderPhase(value,task,phase,index){
  const row=element('li',undefined,'task-phase');row.dataset.status=phase.status;const detail=element('details',undefined,'task-detail'),summary=element('summary');
  const key=String(value.id||'legacy')+':'+task.id+':'+phase.id;detail.dataset.processKey=key;detail.open=expanded.get(key)===true;
@@ -15,7 +15,10 @@ function renderPhase(value,task,phase,index){
  if(phase.summary)body.append(element('p',phase.summary));
  if(!actions.length&&!phase.summary)body.append(element('p',phase.status==='pending'?'아직 시작하지 않은 태스크입니다.':'보관된 실행 과정이 없습니다.'));
  for(const step of actions){
-  const action=element('section',undefined,'task-action');action.append(element('strong',step.title));
+  const action=element('section',undefined,'task-action');action.dataset.stepId=step.id;action.append(element('strong',step.title));
+  if(step.tool)action.append(element('p','사용 도구: '+step.tool));if(step.target)action.append(element('p','대상: '+step.target));
+  if(step.startedAt)action.append(element('p','시작 '+clock(step.startedAt)+(step.finishedAt?' · 종료 '+clock(step.finishedAt)+' · '+Math.max(0,Math.round((step.finishedAt-step.startedAt)/1000))+'초':''),'task-timing'));
+  if(step.result)action.append(element('p','결과: '+step.result,'task-result'));
   if(step.criterion)action.append(element('p','확인 기준 · '+step.criterion,'task-criterion'));
   if(step.reason)action.append(element('p',step.reason,'task-reason'));
   if(step.attempts>1)action.append(element('p','동일 작업 시도 '+step.attempts+'회'));
@@ -24,14 +27,14 @@ function renderPhase(value,task,phase,index){
   if(!events.length)action.append(element('p',step.status==='pending'?'아직 수행하지 않았습니다.':'이전 버전 기록에는 세부 수행 과정이 저장되지 않았습니다.'));
   for(const event of events){
    const entry=element('div',undefined,'task-event');entry.dataset.status=event.status;
-   entry.append(element('time',clock(event.at)),element('span',event.message));
+   entry.append(element('time',clock(event.at)),element('span',event.message||event.text||''));
    if(event.tool)entry.append(element('code','도구 · '+event.tool+(event.operation?' / '+event.operation:'')));
    for(const fact of event.facts||[])entry.append(element('small',fact));
    if(event.code)entry.append(element('small','오류 코드 · '+event.code));action.append(entry);
   }
   body.append(action);
  }
- detail.append(summary,body);detail.addEventListener('toggle',()=>{if(!detail.isConnected)return;expanded.set(key,detail.open);if(expanded.size>600)expanded.delete(expanded.keys().next().value);});row.append(detail);return row;
+ detail.append(summary,body);summary.addEventListener('click',event=>{event.preventDefault();detail.open=!detail.open;expanded.set(key,detail.open);});detail.addEventListener('toggle',()=>{if(!detail.isConnected)return;expanded.set(key,detail.open);if(expanded.size>600)expanded.delete(expanded.keys().next().value);});row.append(detail);return row;
 }
 function renderPlan(value){
  if(!value?.tasks?.length)return null;const box=element('section',undefined,'task-plan'),heading=element('strong','To Do · '+value.tasks.filter(t=>t.status==='completed').length+'/'+value.tasks.length),hint=element('small','태스크를 누르면 수행 과정을 볼 수 있어요.','task-plan-hint'),list=element('ol');box.append(heading,hint,list);

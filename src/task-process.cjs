@@ -17,7 +17,7 @@ function draft(task,prompt,options={}){
  const p=prompt.replace(/"[^"\n]*"|'[^'\n]*'|“[^”]*”|`[^`]*`/g,' '),items=[];
  const add=(role,title)=>{if(!items.some(i=>i.role===role))items.push({id:task.id+'-phase-'+role,role,title,status:'pending'});};
  const doc=/한글|문서|hwpx?|pdf/i.test(p)||options.toolDomain==='hangul'&&!/파일\s*목록|작업\s*폴더|디렉터리/.test(p);
- const browser=options.toolDomain==='browser'||/사이트|네이버|다음|구글|뉴스|기사|웹페이지|https?:\/\//i.test(p);
+ const browser=!options.portalWorkflow&&(options.toolDomain==='browser'||/사이트|네이버|다음|구글|뉴스|기사|웹페이지|https?:\/\//i.test(p));
  const edit=/수정|편집|바꾸|바꿔|변경|굵게|서식/.test(p),create=/만들|작성|생성/.test(p),read=/읽|조회|목록|검색|찾아|확인|보여|봐/.test(p);
  if(doc){if(edit||read&&!create)add('read','문서의 원문·요청 영역 읽기');if(create)add('write','요청한 문서 작성·저장');else if(edit)add('write','요청한 본문·서식 편집');if(/PDF|출력|변환/i.test(p))add('export','PDF 사본 출력·저장');}
  else if(browser){if(/열|들어|접속|이동|방문|https?:\/\//.test(p))add('navigate','요청한 사이트·실제 링크 열기');if(/검색|찾아/.test(p))add('search','요청한 검색어로 자료 찾기');if(/읽|뉴스|기사|본문|봐|보여|확인|요약|정리/.test(p))add('read','대상 페이지·기사 본문 읽기');}

@@ -1,11 +1,12 @@
 'use strict';
 // The model selects observed excerpts; only the renderer writes status/scope.
 const salient=/제출|회신|신청|마감|기한|취소|변경|폐기|연기|제외|대상|인원|합계|예산|경비|제출처|회신처|\d/;
+const noteDate=require('./messenger-archive.cjs').date;
 const baseName=p=>String(p||'첨부 이름 미확인').split(/[\\/]/).at(-1);
 function bodyText(d){if(typeof d.text==='string')return d.text;if(typeof d.body==='string')return d.body;return (d.items||d.messages||[]).map(m=>[m.date,m.sender,m.text].filter(v=>typeof v==='string'&&v).join(' · ')).filter(Boolean).join('\n');}
 function evidenceReport(context,footer=''){
  if(!context?.documents)return null;
- const cbe=Boolean(context.box||context.kind),cards=[],sources=[];
+ const cbe=Boolean(context.box||context.kind),note=cbe&&context.kind!=='chat',cards=[],sources=[];
  const add=(card,label,text,confirmed=true,error)=>{
   if(!confirmed){card.notes.push(label+' 미확인'+(error?' — '+String(error).slice(0,180):''));return;}
   if(!text?.trim()){card.notes.push(label+' 텍스트 없음');return;}
@@ -18,11 +19,11 @@ function evidenceReport(context,footer=''){
   const offset=sources.reduce((n,s)=>n+s.excerpts.length,0);source.excerpts.forEach((e,i)=>e.id='e'+(offset+i+1));sources.push(source);card.sources.push(source);
  };
  for(const [index,d]of context.documents.entries()){
-  const card={title:d.title||d.id||'문서 '+(index+1),sources:[],notes:[]};cards.push(card);
-  if(cbe){add(card,'본문',bodyText(d));if(d.items?.some(m=>m.excerpted))card.notes.push('일부 대화 본문은 서버 길이 제한으로 발췌되었습니다.');if(typeof d.sender==='string')card.notes.push('보낸 사람: '+d.sender);if(typeof d.date==='string')card.notes.push('작성 시각: '+d.date);const attachments=d.files||d.attachments||d.items?.flatMap(m=>m.attachment?[m.attachment]:[])||[];if(d.attachmentContents){for(const a of d.attachmentContents)add(card,'첨부 '+baseName(a.path),a.text,!a.unconfirmed,a.error);}else if(attachments.length)card.notes.push('첨부 '+attachments.length+'개 내용 미확인');}
+  const card={title:d.title||(note?'(제목 없음)':d.id||'문서 '+(index+1)),date:noteDate(d.date)||'날짜 미확인',sources:[],notes:[]};cards.push(card);
+  if(cbe){add(card,'본문',bodyText(d));if(d.items?.some(m=>m.excerpted))card.notes.push('일부 대화 본문은 서버 길이 제한으로 발췌되었습니다.');if(typeof d.sender==='string')card.notes.push('보낸 사람: '+d.sender);if(!note&&typeof d.date==='string')card.notes.push('작성 시각: '+d.date);const attachments=d.files||d.attachments||d.items?.flatMap(m=>m.attachment?[m.attachment]:[])||[];if(d.attachmentContents){for(const a of d.attachmentContents)add(card,'첨부 '+baseName(a.path),a.text,!a.unconfirmed,a.error);}else if(attachments.length)card.notes.push('첨부 '+attachments.length+'개 내용 미확인');}
   else{if(d.listing?.headers&&d.listing?.rows)add(card,'목록',d.listing.rows.map(row=>d.listing.headers.map((h,i)=>h+': '+String(row[i]??'')).join(' | ')).join('\n'));add(card,context.listing?'목록':'본문',d.body,d.bodyRead===true);for(const a of d.attachments||[])add(card,'첨부 '+baseName(a.path),a.text,!a.unconfirmed,a.error);if(d.attachments?.some(a=>a.unconfirmed))card.notes.push('미확인 첨부에만 기재된 제출처·양식 등은 미확인입니다.');}
  }
- for(const d of context.unconfirmed||[])cards.push({title:d.title||d.id||'문서',sources:[],notes:['본문 미확인'+(d.error?' — '+d.error:'')]});
+ for(const d of context.unconfirmed||[])cards.push({title:d.title||(note?'(제목 없음)':d.id||'문서'),date:noteDate(d.date)||'날짜 미확인',sources:[],notes:['본문 미확인'+(d.error?' — '+d.error:'')]});
  const all=sources.flatMap(s=>s.excerpts),ids=all.map(e=>e.id);
  const render=(selected=[],failure)=>{
   if(selected.some(id=>!ids.includes(id)))throw new Error('원문에 없는 요약 근거 ID입니다.');
@@ -32,7 +33,7 @@ function evidenceReport(context,footer=''){
   for(const source of sources){wanted.add(source.excerpts[0].id);for(const e of source.excerpts)if(salient.test(e.text))wanted.add(e.id);}
   const lines=[failure?'자동 요약 구성을 확인하지 못해 조회한 원문의 주요 구절을 표시합니다.':'확인한 원문 근거로 요약했습니다.'];
   for(const [i,card]of cards.entries()){
-   lines.push('\n'+(i+1)+'. '+card.title);
+   lines.push('\n'+(note?card.date+' · ':(i+1)+'. ')+card.title);
    for(const source of card.sources){for(const e of source.excerpts.filter(e=>wanted.has(e.id)))lines.push('  '+source.label+': 「'+e.text+'」');if(source.truncated)lines.push('  긴 원문의 주요 구절 발췌입니다. 세부 전체 요약은 문서별 확인이 필요합니다.');}
    lines.push(...card.notes.map(n=>'  '+n));
   }

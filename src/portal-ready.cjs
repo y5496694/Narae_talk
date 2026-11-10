@@ -43,7 +43,9 @@ async function ensure(args,{cfg,browser,state,signal,login,onProgress=()=>{}}){
  // Its generic product-title tab reuse is not regional evidence: an older
  // province's NEIS tab can have the same title. Enter requested services via
  // the exact-origin checks above, without reading credentials a second time.
- const result=await login({...args,operation:'login',systems:[]},{cfg,browser,state,signal});
+ const execute=browser.execute;let result;
+ browser.execute=async function(command){const screen=await execute.call(this,command);if(command.action==='snapshot')onProgress('업무포털 확인 중 · '+(screen.dialog||screen.title||'화면 로딩'));return screen;};
+ try{result=await login({...args,operation:'login',systems:[]},{cfg,browser,state,signal,onProgress});}finally{browser.execute=execute;}
  if(!result.complete||!result.authenticated||!systems.length)return {...result,region:cfg.region};
  return ensure(args,{cfg,browser,state,signal,onProgress,login:async()=>({...result,complete:false,stage:'system_handoff_unconfirmed',region:cfg.region,message:'진입한 업무 창을 요청한 교육청의 주소와 대조하지 못했습니다. 인증은 반복하지 않고 열린 창을 유지합니다.'})});
 }

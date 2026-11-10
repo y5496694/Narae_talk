@@ -3,6 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {runPlan}=require('../src/request-plan.cjs');
 const {checklist}=require('../src/task-checklist.cjs');
 const signal=()=>new AbortController().signal;
+test('regional school-site work plans authentication before its work phase',()=>{const task={id:'regional'};require('../src/task-process.cjs').draft(task,'나이스 사이트 업무 화면 확인',{portalWorkflow:true,toolDomain:'narae'});assert.equal(task.phases[0].role,'connect');});
 test('document To Do publishes real read/edit/check Tasks before its first tool, with per-Task process evidence',async()=>{
  const plans=[];let calls=0;
  await runPlan({prompt:'열린 한글 수정해줘',toolDomain:'hangul',signal:signal(),send:e=>{if(e.type==='taskPlan')plans.push(e.plan);},execute:async name=>{

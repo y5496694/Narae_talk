@@ -14,6 +14,13 @@ test('compound requests preserve order and quoted payloads, summary evidence, pr
  const quoted=splitRequest('제목은 "네이버 들어가고 다음 들어가"로 문서 만들고 PDF로 출력해줘');assert.equal(quoted.length,2);assert(quoted[0].includes('"네이버 들어가고 다음 들어가"'));
  assert.throws(()=>splitRequest(Array.from({length:13},(_,i)=>`${i+1}. 네이버 들어가`).join('\n')),/최대/);
 });
+test('explicit To Do lists keep each task in order without treating the heading or missing verbs as another task',()=>{
+ assert.deepEqual(splitRequest('투두:\n1. 오늘 일정\n2. 최근 쪽지'),['오늘 일정','최근 쪽지']);
+ assert.deepEqual(splitRequest('다음 작업을 순서대로 수행해줘\n- 이지에듀 일정 확인\n- 받은 쪽지 요약'),['이지에듀 일정 확인','받은 쪽지 요약']);
+ assert.deepEqual(splitRequest('내일 기준으로 해줘\n1. 일정 확인\n2. 쪽지 확인'),['내일 기준으로 해줘\n일정 확인','내일 기준으로 해줘\n쪽지 확인']);
+ assert.deepEqual(splitRequest('투두:\n1. 파일 목록'),['파일 목록']);
+});
+test('a one-item noun-only To Do still publishes and executes a real task',async()=>{let plan,calls=0;await runPlan({prompt:'투두:\n1. 파일 목록',signal:new AbortController().signal,send:event=>{if(event.type==='taskPlan')plan=event.plan;},execute:async()=>{calls++;return {files:['fixture.txt']};}},async options=>{await options.execute('list_files',{},options.signal);return '파일 목록 확인';});assert.equal(calls,1);assert.equal(plan.tasks[0].title,'파일 목록');assert.equal(plan.tasks[0].status,'completed');});
 test('a plan is published before execution, advances one task at a time and carries results and original constraints',async()=>{
  const plans=[],calls=[],signal=new AbortController().signal,prompt='네이버 들어가고 다음 들어가';
  const text=await runPlan({prompt,history:[],signal,send:e=>{if(e.type==='taskPlan')plans.push(e.plan);},execute:async(name,args)=>{calls.push(args.url);return {url:args.url};}},async options=>{

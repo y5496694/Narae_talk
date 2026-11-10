@@ -35,3 +35,12 @@ test('login needs the requested authenticated systems and unverified edits are n
 test('Task labels use the observed field name without storing entered values or browser references',async()=>{
  const task={id:'field'},checks=checklist(task,'나이스 조회해줘',()=>{});await checks.execute('gyomu_browser',{action:'fill',ref:'private-ref',text:'private-input'},signal(),async()=>({title:'나이스'}),{label:'시작일자'});assert.match(task.steps[0].title,/시작일자/);assert(!JSON.stringify(task).includes('private-'));
 });
+test('each task records the real operation, tool, times and result counts without argument values or document bodies',async()=>{
+ const task={id:'details'},checks=checklist(task,'설치 상태와 쪽지 확인',()=>{});
+ await checks.execute('gyomu_system_status',{password:'argument-canary'},signal(),async()=>({text:'private-body-canary'}));
+ await checks.execute('gyomu_skill_read',{area:'neis'},signal(),async()=>({text:'private-body-canary'}));
+ await checks.execute('gyomu_cbe_inbox',{operation:'recent',detail:true,count:2},signal(),async()=>({documents:[{text:'private-body-canary'},{text:'private-body-canary'}]}));
+ assert.match(task.steps[0].title,/설치 도구·연결 상태/);assert.match(task.steps[1].title,/나이스 사용 절차/);assert.match(task.steps[2].title,/쪽지 본문·첨부/);assert.match(task.steps[2].result,/본문 2건/);
+ for(const step of task.steps.filter(s=>s.kind==='action')){assert(step.tool);assert(step.startedAt<=step.finishedAt);assert.equal(step.process.length,2);assert.equal(step.status,'completed');}
+ assert(!JSON.stringify(task).includes('canary'));assert(!JSON.stringify(task).includes('연결된 도구 실행'));
+});

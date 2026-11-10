@@ -63,6 +63,9 @@ test('dedicated Chrome uses observed certificate iframe, delayed SSO and real se
   const result=await login({systems:['neis','edufine']},{cfg:{portalUrl:'https://portal.fixture/login',region:'충북'},browser,state,readProfile:async action=>action==='Status'?{valid:true,certificate_path_exists:true}:profile});
   assert.equal(result.complete,true,JSON.stringify(result));assert.deepEqual(result.systems,{neis:true,edufine:true});
   assert.equal(submitted,1);assert.equal(matched,true);assert.equal(profile.password,null);
+  assert(events.filter(e=>e.args.action==='open').every(e=>e.args.url==='https://portal.fixture/login'));
+  const clicked=events.flatMap((event,index)=>event.args.action==='click'?[events.slice(0,index).findLast(previous=>previous.result.elements?.some(e=>e.ref===event.args.ref))?.result.elements.find(e=>e.ref===event.args.ref)?.label]:[]);
+  const certificateSteps=['교육행정 전자서명 인증서 로그인','하드디스크','개인 가상 인증서 유효함','확인'].map(label=>clicked.indexOf(label));assert(certificateSteps.every((at,index)=>at>=0&&(index===0||at>certificateSteps[index-1])),JSON.stringify(clicked));
   assert.equal(JSON.stringify(events).includes(secret),false);assert.equal(JSON.stringify(result).includes(secret),false);
   await login({systems:[]},{cfg:{portalUrl:'https://portal.fixture/login',region:'충북'},browser,state,readProfile:()=>{throw Error('must reuse login');}});
   assert.equal(submitted,1);
