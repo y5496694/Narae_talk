@@ -23,6 +23,7 @@ test('a plan is published before execution, advances one task at a time and carr
  });
  assert.deepEqual(plans[0].tasks.map(t=>t.status),['pending','pending']);assert.deepEqual(plans.at(-1).tasks.map(t=>t.status),['completed','completed']);assert.equal(calls.length,2);assert.match(text,/\[x\]/);
 });
+test('browser home-to-news uses the observed-link state machine rather than independently guessed URLs',()=>{const prompt='네이버 들어가고 네이버 뉴스 들어가봐',options={toolDomain:'browser',additionalTools:[{name:'gyomu_browser'}]};assert.deepEqual(splitRequest(prompt,options),[prompt]);assert.equal(splitRequest(prompt).length,2);assert.equal(splitRequest('네이버 들어가고 제목 알려줘 그리고 새.hwpx 만들어줘',options).length,3);assert.equal(splitRequest(prompt+' 그리고 새.hwpx 만들어줘',options).length,3);assert.equal(splitRequest(prompt+' 그리고 구글 열어줘',options).length,3);});
 test('unverified completion, failed tools and pending login stop dependent tasks',async()=>{
  for(const failure of ['no-evidence','pending','error']){
   const plans=[];let count=0;

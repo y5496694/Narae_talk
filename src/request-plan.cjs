@@ -6,8 +6,11 @@ const incomplete=/미완료|미확인|확인하지 못|확인할 수 없|완료�
 // Mask quoted payloads, URLs and brackets before finding task boundaries. Their
 // text remains byte-for-byte intact in the instructions we actually execute.
 function maskPayload(text){return text.replace(/https?:\/\/[^\s<>]+|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|“[^”]*”|「[^」]*」|`[^`]*`|\([^)]*\)|\[[^\]]*\]/g,m=>'\uFFFC'.repeat(m.length));}
-function splitRequest(prompt,{portalWorkflow=false}={}){
+function splitRequest(prompt,{portalWorkflow=false,toolDomain='',additionalTools=[],history=[]}={}){
  if(typeof prompt!=='string')return [];
+ // The browser executor must observe the home page's actual destination link.
+ // Splitting this route would discard that evidence and guess a fresh URL.
+ const browser=require('./browser-task.cjs').browserTask(prompt,history,{domain:toolDomain,canBrowse:additionalTools.some(t=>t.name==='gyomu_browser')});
  const masked=maskPayload(prompt),cuts=[];
  const numbered=[...masked.matchAll(/(?:^|\n)\s*(?:\d+[.)]|[-*])\s+/g)];
  // Existing school state machines own login, draft/review and final actions.
@@ -32,6 +35,7 @@ function splitRequest(prompt,{portalWorkflow=false}={}){
  // Reading/searching and its summary are one evidence-preserving workflow.
  const merged=[];
  for(const part of parts){if(merged.length&&/^(?:(?:그\s*)?(?:내용|결과|본문|자료|기사)(?:\s*\d+\s*개)?(?:을|를)?\s*)?(?:요약|정리|비교)(?:해|하|해줘|해봐|해\s*줘|해주세요|해줘요|해봐요|해라|해서|하고)?[.!?\s]*$/.test(part))merged[merged.length-1]+=' 그리고 '+part;else merged.push(part);}
+ if(numbered.length<2&&merged.length===2&&browser?.openOnly&&browser.destination&&!expectedMutation(prompt))return [prompt.trim()];
  if(merged.length>MAX_TASKS)throw Error('한 요청의 작업 목록은 최대 '+MAX_TASKS+'개입니다. 요청을 나누어 주세요.');
  return merged;
 }
@@ -65,7 +69,7 @@ async function runPlan(options,runSingle){
  const {readonly,hardStop}=require('./talk-knowledge.cjs');
  const plan={id:randomUUID(),tasks:parts.map((prompt,i)=>({id:'task-'+(i+1),title:prompt.slice(0,240),status:'pending',attempts:0,observations:[],recovery:[]}))},results=[],history=[...(options.history||[])];
  let context=options.context,documentContext=options.documentContext;
- const publish=()=>options.send({type:'taskPlan',plan:structuredClone(plan)}),checklists=plan.tasks.map((task,i)=>require('./task-checklist.cjs').checklist(task,parts[i],publish));publish();
+ const publish=()=>options.send({type:'taskPlan',plan:structuredClone(plan)}),checklists=plan.tasks.map((task,i)=>require('./task-checklist.cjs').checklist(task,parts[i],publish,{...options,tools:[...(options.baseTools||[]),...(options.additionalTools||[])]}));publish();
  try {for(let i=0;i<parts.length;i++){
   const task=plan.tasks[i],allEvidence=[];let outcome,text='',reason,recovery='',recoveryReadOnly=false;const checks=checklists[i];
   try{
@@ -73,14 +77,14 @@ async function runPlan(options,runSingle){
     options.signal.throwIfAborted();task.status='in_progress';task.attempts=attempt+1;delete task.reason;publish();
     const evidence=[];outcome=undefined;let failed;
     try {
-     text=await runSingle({...options,context,documentContext,prompt:parts[i],history,planContext:results.map((result,n)=>({task:parts[n],result:result.slice(0,2000)})).slice(-6),agentInstructions:(options.agentInstructions||'')+(multiple?'\n원래 사용자 요청 전체(금지·범위·수신자·파일 조건을 모두 유지):\n'+options.prompt+'\n현재 작업 '+(i+1)+'/'+parts.length+'만 수행하고 나머지는 실행기가 순서대로 처리합니다. 이전 작업의 결과는 대화 기록에서 확인하세요.':'')+(recovery?'\n[실패 후 재조정한 계획]\n'+recovery+'\n이전 실행의 도구 관찰:\n'+JSON.stringify(allEvidence.slice(-12).map(e=>({name:e.name,ok:!e.value?.error&&e.value?.success!==false,readOnly:readonly(e.name,e.args)})))+(recoveryReadOnly?'\n이전 변경은 실행 여부가 불확실하므로 조회·검증만 허용됩니다. 변경·발송·삭제를 재실행하지 마세요.':''):''),onOutcome:value=>{outcome=value;options.onOutcome?.(value);},send:event=>{if(event.type!=='text'||!multiple&&!options.replan)options.send(event);},execute:(name,args,signal,observed)=>checks.execute(name,args,signal,async()=>{
+     text=await runSingle({...options,context,documentContext,prompt:parts[i],history,planContext:results.map((result,n)=>({task:parts[n],result:result.slice(0,2000)})).slice(-6),agentInstructions:(options.agentInstructions||'')+'\n[현재 To Do의 순차 실행 태스크]\n'+task.phases.map((p,n)=>(n+1)+'. '+p.title).join('\n')+'\n이 순서로 실제 작업을 진행하고 앞 단계의 응답을 확인한 뒤 다음 단계로 넘어갑니다. 태스크 이름은 권한이나 추가 실행 범위를 부여하지 않습니다. 불필요한 계획 단계는 억지로 실행하지 말고, 요청 범위와 기존 승인·검증 규칙을 유지하세요.'+(multiple?'\n원래 사용자 요청 전체(금지·범위·수신자·파일 조건을 모두 유지):\n'+options.prompt+'\n현재 작업 '+(i+1)+'/'+parts.length+'만 수행하고 나머지는 실행기가 순서대로 처리합니다. 이전 작업의 결과는 대화 기록에서 확인하세요.':'')+(recovery?'\n[실패 후 재조정한 계획]\n'+recovery+'\n이전 실행의 도구 관찰:\n'+JSON.stringify(allEvidence.slice(-12).map(e=>({name:e.name,ok:!e.value?.error&&e.value?.success!==false,readOnly:readonly(e.name,e.args)})))+(recoveryReadOnly?'\n이전 변경은 실행 여부가 불확실하므로 조회·검증만 허용됩니다. 변경·발송·삭제를 재실행하지 마세요.':''):''),onOutcome:value=>{outcome=value;options.onOutcome?.(value);},send:event=>{if(event.type!=='text'||!multiple&&!options.replan)options.send(event);},execute:(name,args,signal,observed)=>checks.execute(name,args,signal,async()=>{
       if(recoveryReadOnly&&!readonly(name,args))throw Object.assign(Error('이전 변경을 반복하지 않습니다. 조회로 실행 결과를 확인하세요.'),{code:'REPLAN_READ_ONLY'});
       try{const value=await options.execute(name,args,signal);const e={name,args,value};evidence.push(e);allEvidence.push(e);task.observations.push({name,ok:!value?.error&&value?.success!==false&&value?.ok!==false,readOnly:readonly(name,args)});return value;}
       catch(error){const e={name,args,value:{error:error.code||error.message}};evidence.push(e);allEvidence.push(e);task.observations.push({name,ok:false,readOnly:readonly(name,args)});throw error;}
      },observed)});
     }catch(error){if(options.replan!==true||options.signal.aborted||hardStop(error.code+' '+error.message))throw error;failed=error;}
     options.signal.throwIfAborted();checks.startCheck();reason=failed?String(failed.code||failed.message):blockedResult(text,evidence,outcome,parts[i]);
-    if(!reason){task.status='completed';checks.finish(null);break;}
+    if(!reason){task.status='completed';checks.finish(null,text);break;}
     task.reason=String(reason).slice(0,400);checks.finish(reason);
     const waiting=outcome?.pending===true||allEvidence.some(e=>e.value?.pending||e.value?.approval||e.value?.requiresLogin||hardStop(e.value?.code||e.value?.error||''));
     if(options.replan!==true||attempt>=2||waiting||hardStop(reason)){task.status='blocked';break;}
