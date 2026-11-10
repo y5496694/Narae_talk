@@ -39,16 +39,12 @@ async function ensure(args,{cfg,browser,state,signal,login,onProgress=()=>{}}){
   if(browser.attached)return {authenticated:false,complete:false,stage:'dedicated_browser_required',region:cfg.region,message:'만료된 업무 창을 닫았습니다. 등록된 인증서로 새 업무 창에 로그인해야 합니다.'};
   browser.page=await browser.context.newPage();browser.frame=null;browser.invalidate();
  }
- // Record the active page actually observed by the shared login engine. A
- // service link may reuse an existing tab, so "new tab" alone is not evidence.
- const observed={},execute=browser.execute;let result;
- browser.execute=async function(args){const screen=await execute.call(this,args);if(args.action==='snapshot'){onProgress('업무포털 확인 중 · '+(screen.dialog||screen.title||'화면 로딩'));let origin;try{origin=new URL(screen.url).origin;}catch{}if(origin&&origin!==portalOrigin&&browser.page?.url()===screen.url)for(const system of systems)if(usable(system,screen,origin))observed[system]={page:browser.page,origin};}return screen;};
- try{result=await login({...args,operation:'login'},{cfg,browser,state,signal});}finally{browser.execute=execute;}
- if(!result.complete||!result.authenticated||!systems.every(system=>result.systems?.[system]===true))return {...result,region:cfg.region};
- if(!systems.length)return {...result,region:cfg.region};
- for(const system of systems){if(!observed[system]||observed[system].page.isClosed())return {...result,complete:false,stage:'system_handoff_unconfirmed',region:cfg.region,message:'진입한 업무 창을 확인하지 못했습니다. 열린 창에서 요청한 시스템을 확인해 주세요.'};
-  state.services[system]=observed[system];
- }
- state.serviceRegion=cfg.region;await observe(state.services[systems.at(-1)].page);return {...result,region:cfg.region};
+ // The shared certificate engine verifies only this region's portal login.
+ // Its generic product-title tab reuse is not regional evidence: an older
+ // province's NEIS tab can have the same title. Enter requested services via
+ // the exact-origin checks above, without reading credentials a second time.
+ const result=await login({...args,operation:'login',systems:[]},{cfg,browser,state,signal});
+ if(!result.complete||!result.authenticated||!systems.length)return {...result,region:cfg.region};
+ return ensure(args,{cfg,browser,state,signal,onProgress,login:async()=>({...result,complete:false,stage:'system_handoff_unconfirmed',region:cfg.region,message:'진입한 업무 창을 요청한 교육청의 주소와 대조하지 못했습니다. 인증은 반복하지 않고 열린 창을 유지합니다.'})});
 }
 module.exports={ensure,usable,expired};
