@@ -5,6 +5,7 @@ function serviceLinks(screen,label){const matches=(screen.elements||[]).filter(e
 const expired=screen=>/세션(?:이|가)?\s*(?:만료되었|만료됐|종료되었)|만료된\s*세션|로그인\s*(?:정보|세션)(?:가|이)?\s*(?:없습니다|만료되었|만료됐|유효하지\s*않습니다)/.test(screen.nativeDialog?.message||screen.text||'');
 function usable(system,screen,expectedOrigin){let origin;try{origin=new URL(screen.url).origin;}catch{return false;}return origin===expectedOrigin&&origin.startsWith('https://')&&product(system,screen.title)&&!/로그인|SSO LOGIN/i.test(screen.title||'')&&!/다른 앱 및 서비스|로컬 네트워크.*(?:허용|액세스)|HTTP(?:\s+ERROR)?\s+[45]\d\d|접속.*실패|오류코드/.test(screen.text||'')&&!/로그인(?:이|을)?\s*필요|세션[^\n]{0,20}(?:만료|종료)|인증[^\n]{0,20}만료/.test(screen.text||'')&&screen.elements?.length>0&&!screen.elements.some(e=>e.type==='password'||/인증서.*로그인/.test(e.label||''))&&screen.loading!==true&&!screen.nativeDialog;}
 async function ensure(args,{cfg,browser,state,signal,login,onProgress=()=>{}}){
+ const originalPage=browser.page,originalFrame=browser.frame;
  const systems=args.systems||[],portalOrigin=new URL(cfg.portalUrl).origin;if(state.serviceRegion!==cfg.region)state.services={};state.services||={};
  const observe=async page=>{signal?.throwIfAborted();browser.page=page;browser.frame=null;browser.invalidate();return browser.execute({action:'snapshot',limit:100,chars:3000});};
  // Reuse only service pages verified in this browser and this education region.
@@ -17,6 +18,14 @@ async function ensure(args,{cfg,browser,state,signal,login,onProgress=()=>{}}){
  for(const page of pages){const host=origin(page.url()),system=systems.find(s=>host===expected[s]||host===state.services[s]?.origin);if(!system&&host!==portalOrigin)continue;onProgress('열린 '+(system==='neis'?'나이스':system==='edufine'?'K-에듀파인':'업무포털')+' 창 확인 중');const screen=await observe(page);if(expired(screen)){stale.push(page);continue;}if(system&&usable(system,screen,host))ready[system]={page,origin:host};else if(host===portalOrigin)portalPages.push(page);}
  const reused=async()=>{state.services={...state.services,...ready};state.serviceRegion=cfg.region;if(systems.length)await observe(ready[systems.at(-1)].page);return {authenticated:true,complete:true,stage:'verified',region:cfg.region,reused:true,systems:Object.fromEntries(systems.map(s=>[s,true]))};};
  if(systems.length&&systems.every(s=>ready[s]))return reused();
+ // A recovery may verify an existing login without replaying uncertain work.
+ if(args.read_only===true){
+  let authenticated=Object.keys(ready).length>0;
+  for(const page of portalPages){const screen=await observe(page);if(/로그아웃|Logout/i.test(screen.text||'')&&!screen.nativeDialog&&!expired(screen))authenticated=true;}
+  if(authenticated&&!systems.length)return reused();
+  if(originalPage&&!originalPage.isClosed()){browser.page=originalPage;browser.frame=originalFrame;browser.invalidate();}
+  return {authenticated,complete:false,stage:'recovery_verification_required',region:cfg.region,systems:Object.fromEntries(systems.map(s=>[s,Boolean(ready[s])])),message:'복구 중 현재 업무 화면을 조회했지만 요청한 시스템 전체의 준비 상태는 확인하지 못했습니다. 열린 창은 유지하며 새 로그인·클릭·신청은 실행하지 않았습니다.'};
+ }
  // A portal's informational notice can hide its authenticated navigation.
  // Search for the real close control instead of assuming a fixed ref or URL.
  for(const page of stale.length?[]:portalPages){let screen=await observe(page);if(!screen.elements?.some(e=>e.type==='password')&&!/인증|접근.*허용|다른 앱/.test(screen.dialog||'')){const filtered=await browser.execute({action:'snapshot',filter:'전체닫기',limit:20,chars:500}),close=filtered.elements?.filter(e=>!e.disabled&&e.label?.replace(/[\s×✕]/g,'')==='전체닫기');if(close?.length===1){await browser.execute({action:'click',ref:close[0].ref});screen=await observe(page);}else screen=await observe(page);}

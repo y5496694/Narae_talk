@@ -5,6 +5,7 @@ import {chromium} from 'playwright-core';
 import {randomUUID} from 'node:crypto';
 import session from './school-session.cjs';
 import regional from './school-region.cjs';
+import cleanup from './browser-tab-cleanup.cjs';
 function snapshotOptions(args){return {limit:bound(args.limit,1,100,50),chars:bound(args.chars,100,12000,1800),offset:bound(args.offset,0,10000,0)};}
 function calendarChanged(expected){
  const popup=[...document.querySelectorAll('.cl-calendar.cl-popup')].find(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden';});
@@ -29,7 +30,8 @@ function documentRowsDOM(){
  });
 }
 export class OfficeSchoolBrowser extends SchoolBrowser {
- constructor({profile,connection='isolated',connectionDirectory,endpoint,environment={}}={}){super();Object.assign(this,{profile,connection,connectionDirectory,endpoint,environment});this.closed=false;}
+ constructor({profile,connection='isolated',connectionDirectory,endpoint,environment={},busy=()=>false}={}){super();Object.assign(this,{profile,connection,connectionDirectory,endpoint,environment,busy});this.closed=false;}
+ startTabCleanup(){this.tabCleanup=new cleanup.BrowserTabCleanup(this,{busy:this.busy});this.tabCleanup.start();}
  resetTask(){this.launchAttempts=new Set();this.clickAttempts=new Map();}
  clickIdentity(entry,label){this.clickPages||=new WeakMap();if(!this.clickPages.has(this.page))this.clickPages.set(this.page,randomUUID());return JSON.stringify({page:this.clickPages.get(this.page),frame:this.scope().url(),control:entry.id||[entry.role,entry.tag,label],label,dialog:this.lastObservation?.dialog,values:this.lastObservation?.elements?.filter(e=>Object.hasOwn(e,'value')).map(e=>[e.id||e.label,e.value])});}
  async diagnostics(){
@@ -92,12 +94,12 @@ export class OfficeSchoolBrowser extends SchoolBrowser {
  }
  async start({headed=false}={}){
   if(this.connection!=='isolated'){const result=await super.start({headed:true,connection:this.connection,endpoint:this.endpoint,directory:this.connectionDirectory,environment:this.environment});this.browser.on('disconnected',()=>{this.closed=true;});this.context.on('close',()=>{this.closed=true;});return result;}
-  if(!this.profile){const result=await super.start({headed});this.context.on('close',()=>{this.closed=true;});return result;}
-  this.context=await chromium.launchPersistentContext(this.profile,{headless:!headed,chromiumSandbox:true,executablePath:browserPath(),args:['--hide-crash-restore-bubble','--restore-last-session'],viewport:{width:1280,height:900},locale:'ko-KR',acceptDownloads:true,serviceWorkers:'block'});
+  if(!this.profile){const result=await super.start({headed});this.context.on('close',()=>{this.closed=true;});this.startTabCleanup();return result;}
+  this.context=await chromium.launchPersistentContext(this.profile,{headless:!headed,chromiumSandbox:true,executablePath:browserPath(),args:['--hide-crash-restore-bubble'],viewport:{width:1280,height:900},locale:'ko-KR',acceptDownloads:true,serviceWorkers:'block'});
   this.context.on('close',()=>{this.closed=true;});
   this.browser={close:()=>this.context.close()};this.context.setDefaultTimeout(12000);
   const watch=p=>{if(this.pages.includes(p))return;this.pages.push(p);p.on('framenavigated',f=>{if(f===p.mainFrame()&&p===this.page)this.invalidate();});p.on('pageerror',e=>{this.errors.push(e.message.slice(0,200));this.errors=this.errors.slice(-10);});p.on('dialog',d=>d.dismiss().catch(()=>{}));};
-  this.context.on('page',watch);for(const p of this.context.pages())watch(p);this.page=this.pages.findLast(p=>/^https?:/.test(p.url()))||this.pages[0]||await this.context.newPage();this.installFinalDialogs();
+  this.context.on('page',watch);for(const p of this.context.pages())watch(p);this.page=this.pages.findLast(p=>/^https?:/.test(p.url()))||this.pages[0]||await this.context.newPage();this.installFinalDialogs();this.startTabCleanup();
   return {browser:'chromium',headless:!headed,isolated:true,persistent:true};
  }
  async read(args={}){
@@ -155,7 +157,8 @@ export class OfficeSchoolBrowser extends SchoolBrowser {
   }
   this.invalidate();return this.snapshot(command);
  }
- async execute(command){
+ async execute(command){return this.tabCleanup?this.tabCleanup.run(()=>this.executeCommand(command)):this.executeCommand(command);}
+ async executeCommand(command){
   // Validate result bounds before dispatch: a bad snapshot option must not
   // turn a successful click into an apparent failure and invite a retry.
   snapshotOptions(command);

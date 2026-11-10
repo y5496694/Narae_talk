@@ -38,6 +38,14 @@ test('a future session timeout notice is not evidence that the session already e
 test('an already open service is reused even when the current agent has no service cache',async()=>{
  const {browser,cfg,submissions}=await fixture('충북');try{await browser.page.goto(cfg.neisUrl+'work');const page=browser.page,result=await ensure({systems:['neis']},{cfg,browser,state:{},login:()=>{throw Error('must use the open service');}});assert(result.reused);assert.equal(browser.page,page);assert.equal(submissions(),0);assert.equal(browser.context.pages().length,1);}finally{await browser.browser?.close();}
 });
+
+test('read-only recovery reuses a verified service and never closes expired pages or navigates from a portal',async()=>{
+ const {browser,cfg,events}=await fixture('충북');try{
+  await browser.page.goto(new URL('/home',cfg.portalUrl).href);const portalPage=browser.page,work=await browser.context.newPage();await work.goto(cfg.neisUrl+'work');browser.page=work;const noLogin=()=>{throw Error('recovery cannot authenticate');},before=events.length;
+  assert.equal((await ensure({systems:['neis'],read_only:true},{cfg,browser,state:{},login:noLogin})).complete,true);
+  await work.goto(cfg.neisUrl+'expired');const result=await ensure({systems:['neis'],read_only:true},{cfg,browser,state:{},login:noLogin});assert.equal(result.complete,false);assert.equal(result.authenticated,true);assert.equal(result.stage,'recovery_verification_required');assert.equal(browser.page,work);assert(!portalPage.isClosed());assert(!work.isClosed());assert.equal(browser.context.pages().length,2);assert(events.slice(before).every(e=>e.args.action==='snapshot'));
+ }finally{await browser.browser?.close();}
+});
 test('existing portal entry finds the real system link beyond a truncated list and excludes the same-name notification tab',async()=>{
  const {browser,cfg,events}=await fixture('충북');try{
   await browser.page.goto(new URL('/home',cfg.portalUrl).href);await browser.page.setContent('<title>업무포털 메인</title><button>로그아웃</button>'+Array.from({length:105},(_,i)=>'<button>가상 공지 '+i+'</button>').join('')+'<a id="17" href="javascript:void(0)">나이스</a><a id="https://neis.fixture/" href="https://neis.fixture/work" target="_blank">나이스(새창열림)</a>');

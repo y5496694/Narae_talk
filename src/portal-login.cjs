@@ -3,6 +3,7 @@
 const fs=require('node:fs'),path=require('node:path');
 const shared=require('../vendor/narae-gyomu/packages/narae_gyomoo_portal/skills/narae-gyomu-work-portal/scripts/portal-login.cjs');
 const tool=structuredClone(shared.tool);tool.parameters.properties.operation.enum.push('ensure');tool.description+=' ensure는 포탈 친구의 업무 실행 전 로그인·요청 시스템을 확인하고 검증한 업무 창으로 연결한다. 인증은 업무포털의 인증서 로그인 버튼과 사이트 안 인증 프로그램의 저장매체·인증서·암호란·확인 버튼으로 수행한다. SSO 주소를 직접 열거나 토큰을 전달하지 않는다. 보안 문서가 없으면 열린 창에서 직접 로그인을 요청한다.';
+tool.parameters.properties.read_only={type:'boolean',description:'ensure 복구에서 이미 열린 업무 창만 조회한다. 새 탭·인증·로그인·사이트 클릭은 실행하지 않는다.'};
 function configure(home,value){
  if(!value||typeof value!=='object'||Array.isArray(value))return shared.configure(home,value);
  const {autoAllowLocalAccess,...settings}=value;
